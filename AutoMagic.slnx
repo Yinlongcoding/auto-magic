@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AutoMagic.Application/AutoMagic.Application.csproj" />
+    <Project Path="src/AutoMagic.Contracts/AutoMagic.Contracts.csproj" />
+    <Project Path="src/AutoMagic.Desktop/AutoMagic.Desktop.csproj" />
+    <Project Path="src/AutoMagic.Domain/AutoMagic.Domain.csproj" />
+    <Project Path="src/AutoMagic.Infrastructure/AutoMagic.Infrastructure.csproj" />
+    <Project Path="src/AutoMagic.NativeHost/AutoMagic.NativeHost.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AutoMagic.Contracts.Tests/AutoMagic.Contracts.Tests.csproj" />
+  </Folder>
+</Solution>

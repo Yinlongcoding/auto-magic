@@ -1,0 +1,131 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+body {
+  width: 360px;
+  margin: 0;
+  color: #202124;
+  background: #ffffff;
+}
+
+main {
+  padding: 18px;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.versionBadge {
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #475569;
+  background: #eef2f7;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+label {
+  display: block;
+  margin-bottom: 6px;
+  color: #5f6368;
+  font-size: 13px;
+}
+
+input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  font: inherit;
+}
+
+button {
+  width: 100%;
+  height: 38px;
+  margin-top: 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  background: #f4511e;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+#status {
+  margin: 12px 0 0;
+  color: #5f6368;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+#status[data-state="failed"],
+#status[data-state="error"] {
+  color: #b3261e;
+}
+
+#status[data-state="completed"] {
+  color: #137333;
+}
+
+#resultSection {
+  margin-top: 14px;
+}
+
+#detailDomSection {
+  margin-top: 14px;
+}
+
+.resultHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.headerActions {
+  display: flex;
+  gap: 6px;
+}
+
+.secondary {
+  width: auto;
+  height: 30px;
+  margin: 0;
+  padding: 0 12px;
+  color: #f4511e;
+  background: #fff1ec;
+}
+
+.detailMeta {
+  margin: 8px 0;
+  color: #5f6368;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+pre {
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f6f7f8;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
