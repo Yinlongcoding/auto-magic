@@ -1,4 +1,5 @@
 import { serializeDomTree } from './lib/dom-snapshot.js';
+import { extractDetailFacts } from './lib/detail-facts.js';
 
 const activeObjectUrls = new Set();
 
@@ -39,21 +40,27 @@ async function parseDetailDom(message) {
 
   const html = await readResponseText(response, maxHtmlBytes);
   const documentSnapshot = new DOMParser().parseFromString(html, 'text/html');
-  const structure = serializeDomTree(documentSnapshot.documentElement, message.options);
+  const structure = message.options?.includeStructure === false
+    ? null
+    : serializeDomTree(documentSnapshot.documentElement, message.options);
   const capturedAt = new Date().toISOString();
-  const exportText = [
-    'Auto Magic 1688 Detail DOM',
-    `Requested URL: ${requestedUrl}`,
-    `Final URL: ${finalUrl}`,
-    `Captured At: ${capturedAt}`,
-    '',
-    '----- RAW HTML (stored as text; scripts are not executed) -----',
-    html,
-  ].join('\n');
-  const downloadUrl = URL.createObjectURL(
-    new Blob([exportText], { type: 'text/plain;charset=utf-8' }),
-  );
-  activeObjectUrls.add(downloadUrl);
+  const detailFacts = extractDetailFacts(documentSnapshot, finalUrl, message.options);
+  let downloadUrl;
+  if (message.options?.createDownload !== false) {
+    const exportText = [
+      'Auto Magic 1688 Detail DOM',
+      `Requested URL: ${requestedUrl}`,
+      `Final URL: ${finalUrl}`,
+      `Captured At: ${capturedAt}`,
+      '',
+      '----- RAW HTML (stored as text; scripts are not executed) -----',
+      html,
+    ].join('\n');
+    downloadUrl = URL.createObjectURL(
+      new Blob([exportText], { type: 'text/plain;charset=utf-8' }),
+    );
+    activeObjectUrls.add(downloadUrl);
+  }
 
   return {
     requestedUrl,
@@ -63,6 +70,8 @@ async function parseDetailDom(message) {
     contentType,
     htmlBytes: new TextEncoder().encode(html).byteLength,
     structure,
+    facts: detailFacts.facts,
+    factDiagnostics: detailFacts.diagnostics,
     downloadUrl,
   };
 }

@@ -31,6 +31,9 @@ export const LIMITS = Object.freeze({
   wheelStepDelayMs: 250,
   filterApplyDelayMs: 500,
   filterControlTimeoutMs: 3_000,
+  dynamicDetailUrlTimeoutMs: 8_000,
+  dynamicDetailClickDelayMs: 120,
+  maxDynamicDetailUrlCards: 10,
 });
 
 export const DETAIL_DOM_OPTIONS = Object.freeze({
@@ -42,6 +45,12 @@ export const DETAIL_DOM_OPTIONS = Object.freeze({
   maxTextLength: 200,
   maxAttributeValueLength: 160,
   downloadTimeoutMs: 30_000,
+  maxFacts: 500,
+  renderedPageTimeoutMs: 30_000,
+  renderedPollDelayMs: 300,
+  maxImages: 100,
+  maxPriceTexts: 30,
+  maxSkuTexts: 100,
 });
 
 export function isAllowed1688Url(value) {
@@ -120,6 +129,7 @@ export function normalizeStartRequest(message) {
     keyword,
     maxItems: Math.min(requestedMaxItems, LIMITS.maxItems),
     includeDetailDom: message.includeDetailDom !== false,
+    includeDetailFacts: message.includeDetailFacts === true,
     procurementMinimumCny,
     procurementMaximumCny,
     sortMode,

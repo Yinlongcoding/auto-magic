@@ -58,21 +58,36 @@ public sealed record SearchStartPayload(
     int MaxItems = 60,
     decimal? ProcurementMinimumCny = null,
     decimal? ProcurementMaximumCny = null,
-    string SortMode = ProductSortModes.Sales);
+    string SortMode = ProductSortModes.Sales,
+    bool IncludeDetailFacts = false);
 
 public sealed record ExtensionReadyPayload(string ExtensionVersion);
 
 public sealed record SearchAcceptedPayload(string JobId);
 
 public sealed record ProductItemDto(
-    string DetailUrl,
+    string? DetailUrl,
     string ImageUrl,
     string Title,
     string PriceCny);
+
+public sealed record DetailFactDto(
+    string Label,
+    string Value,
+    string Source);
+
+public sealed record DetailFactSnapshotDto(
+    string DetailUrl,
+    string CapturedAt,
+    string? PageTitle,
+    IReadOnlyList<DetailFactDto> Facts,
+    JsonElement? Diagnostics,
+    JsonElement? Raw = null);
 
 public sealed record SearchResultPayload(
     string Keyword,
     string CapturedAt,
     int Count,
     IReadOnlyList<ProductItemDto> Items,
-    JsonElement? Diagnostics);
+    JsonElement? Diagnostics,
+    DetailFactSnapshotDto? DetailSnapshot = null);

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Auto Magic 1688 DOM Demo",
-  "version": "0.1.6",
+  "version": "0.1.10",
   "description": "验证在用户当前 Chrome 中搜索1688并读取商品DOM。",
   "permissions": [
     "alarms",

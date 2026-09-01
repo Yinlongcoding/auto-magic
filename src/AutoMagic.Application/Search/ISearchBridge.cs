@@ -14,5 +14,6 @@ public interface ISearchBridge
         decimal procurementMinimumCny,
         decimal procurementMaximumCny,
         string sortMode,
+        bool includeDetailFacts,
         CancellationToken cancellationToken);
 }

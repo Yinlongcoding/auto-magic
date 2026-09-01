@@ -23,4 +23,10 @@
     <ProjectReference Include="..\..\src\AutoMagic.Domain\AutoMagic.Domain.csproj" />
     <ProjectReference Include="..\..\src\AutoMagic.Infrastructure\AutoMagic.Infrastructure.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\..\src\AutoMagic.Desktop\Data\ozon-category-tree.test.json">
+      <Link>Data\ozon-category-tree.test.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>

@@ -14,11 +14,11 @@
 
 ## 本地构建
 
-项目使用仓库内的 `.tools/dotnet` 作为 .NET 10 SDK：
+构建脚本优先使用仓库内的 `.tools/dotnet`，若该目录不存在则使用系统安装的 .NET 10 SDK。换机后可直接执行：
 
 ```powershell
-.\.tools\dotnet\dotnet.exe build .\AutoMagic.slnx
-.\.tools\dotnet\dotnet.exe test .\AutoMagic.slnx
+dotnet build .\AutoMagic.slnx
+dotnet test .\AutoMagic.slnx
 ```
 
 ## 首次联调
@@ -52,6 +52,6 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 ## 当前限制
 
 - 一次只允许一个搜索任务。
-- 桌面端发起的任务只返回商品列表，不获取和下载第 2 条详情 DOM；插件弹窗原有流程保持不变。
+- 桌面端搜索会返回商品列表，并通过真实 Chrome 渲染页采集列表第 2 条商品的详情事实，供 Ozon 属性覆盖与 AI 语义映射测试使用。
 - 桌面端必须先启动。若桌面端未运行，Chrome 原生消息宿主会退出，扩展稍后自动重连。
 - 开发阶段需手动提供扩展 ID 注册宿主；正式安装包会自动完成该步骤。

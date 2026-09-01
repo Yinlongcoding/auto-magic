@@ -8,14 +8,30 @@ using Microsoft.Extensions.Logging;
 
 namespace AutoMagic.Infrastructure.Bridge;
 
-public sealed class DesktopBridgeService(
-    ILogger<DesktopBridgeService> logger) : BackgroundService, ISearchBridge
+public sealed class DesktopBridgeService : BackgroundService, ISearchBridge
 {
     private static readonly TimeSpan SearchTimeout = TimeSpan.FromMinutes(3);
     private readonly ConcurrentDictionary<string, TaskCompletionSource<SearchResultPayload>> _pending = new();
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private NamedPipeServerStream? _connection;
     private int _connectionState;
+    private readonly ILogger<DesktopBridgeService> _logger;
+    private readonly string _pipeName;
+
+    public DesktopBridgeService(ILogger<DesktopBridgeService> logger)
+        : this(logger, BridgeProtocol.PipeName)
+    {
+    }
+
+    public DesktopBridgeService(
+        ILogger<DesktopBridgeService> logger,
+        string pipeName)
+    {
+        _logger = logger;
+        _pipeName = string.IsNullOrWhiteSpace(pipeName)
+            ? throw new ArgumentException("Pipe name is required.", nameof(pipeName))
+            : pipeName;
+    }
 
     public bool IsExtensionConnected => Volatile.Read(ref _connectionState) == 1;
 
@@ -27,6 +43,7 @@ public sealed class DesktopBridgeService(
         decimal procurementMinimumCny,
         decimal procurementMaximumCny,
         string sortMode,
+        bool includeDetailFacts,
         CancellationToken cancellationToken)
     {
         keyword = keyword.Trim();
@@ -75,7 +92,8 @@ public sealed class DesktopBridgeService(
                     Math.Clamp(maxItems, 1, 60),
                     procurementMinimumCny,
                     procurementMaximumCny,
-                    sortMode));
+                    sortMode,
+                    includeDetailFacts));
             await SendAsync(envelope, cancellationToken);
             return await completion.Task.WaitAsync(SearchTimeout, cancellationToken);
         }
@@ -96,7 +114,7 @@ public sealed class DesktopBridgeService(
             await using var pipe = CreatePipe();
             try
             {
-                logger.LogInformation("等待 Chrome 原生消息宿主连接。Pipe={PipeName}", BridgeProtocol.PipeName);
+                _logger.LogInformation("等待 Chrome 原生消息宿主连接。Pipe={PipeName}", _pipeName);
                 await pipe.WaitForConnectionAsync(stoppingToken);
                 Volatile.Write(ref _connection, pipe);
                 await ReadLoopAsync(pipe, stoppingToken);
@@ -107,7 +125,7 @@ public sealed class DesktopBridgeService(
             }
             catch (Exception error)
             {
-                logger.LogError(error, "Chrome 桥接连接异常，将重新等待连接。");
+                _logger.LogError(error, "Chrome 桥接连接异常，将重新等待连接。");
             }
             finally
             {
@@ -118,9 +136,9 @@ public sealed class DesktopBridgeService(
         }
     }
 
-    private static NamedPipeServerStream CreatePipe() =>
+    private NamedPipeServerStream CreatePipe() =>
         new(
-            BridgeProtocol.PipeName,
+            _pipeName,
             PipeDirection.InOut,
             1,
             PipeTransmissionMode.Byte,
@@ -146,12 +164,12 @@ public sealed class DesktopBridgeService(
         {
             case BridgeProtocol.MessageTypes.ExtensionReady:
                 SetConnected(true);
-                logger.LogInformation("Chrome 插件已连接。Version={Version}",
+                _logger.LogInformation("Chrome 插件已连接。Version={Version}",
                     Deserialize<ExtensionReadyPayload>(envelope)?.ExtensionVersion ?? "unknown");
                 break;
 
             case BridgeProtocol.MessageTypes.SearchAccepted:
-                logger.LogInformation("Chrome 已接受搜索请求。RequestId={RequestId}", envelope.RequestId);
+                _logger.LogInformation("Chrome 已接受搜索请求。RequestId={RequestId}", envelope.RequestId);
                 break;
 
             case BridgeProtocol.MessageTypes.SearchCompleted:

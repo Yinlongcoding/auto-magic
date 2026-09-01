@@ -65,6 +65,9 @@ test('defaults detail DOM capture to the second list item with bounded output', 
   assert.equal(config.DETAIL_DOM_OPTIONS.maxHtmlBytes, 5_000_000);
   assert.equal(config.DETAIL_DOM_OPTIONS.maxNodes, 2_000);
   assert.equal(config.DETAIL_DOM_OPTIONS.maxDepth, 12);
+  assert.equal(config.DETAIL_DOM_OPTIONS.renderedPageTimeoutMs, 30_000);
+  assert.equal(config.DETAIL_DOM_OPTIONS.maxFacts, 500);
+  assert.equal(config.DETAIL_DOM_OPTIONS.maxImages, 100);
 });
 
 test('keeps detail DOM for popup searches and allows desktop searches to skip it', () => {

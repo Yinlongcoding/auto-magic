@@ -1,10 +1,15 @@
+using System.IO;
 using System.Threading;
 using System.Windows;
 using AutoMagic.Application.ExchangeRates;
 using AutoMagic.Application.Search;
+using AutoMagic.Application.Ozon;
+using AutoMagic.Application.Ozon.Mapping;
 using AutoMagic.Desktop.ViewModels;
 using AutoMagic.Infrastructure.Bridge;
 using AutoMagic.Infrastructure.ExchangeRates;
+using AutoMagic.Infrastructure.Ozon;
+using AutoMagic.Infrastructure.Ozon.Mapping;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -36,6 +41,30 @@ public partial class App : System.Windows.Application
             client.Timeout = TimeSpan.FromSeconds(10);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("AutoMagic/0.1");
         });
+        builder.Services.AddHttpClient<IOzonSchemaService, OzonSchemaService>(client =>
+        {
+            client.BaseAddress = new Uri("https://api-seller.ozon.ru/");
+            client.Timeout = TimeSpan.FromSeconds(20);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("AutoMagic/0.2");
+        }).RedactLoggedHeaders(_ => true);
+        builder.Services.AddHttpClient<IQwenSemanticMappingService, QwenSemanticMappingService>(client =>
+        {
+            client.BaseAddress = new Uri(QwenMappingRuntime.SharedBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(90);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("AutoMagic/0.3");
+        }).RedactLoggedHeaders(_ => true);
+        builder.Services.AddSingleton<ILocalOzonCategoryCatalog>(_ =>
+            new LocalOzonCategoryCatalog(
+                Path.Combine(AppContext.BaseDirectory, "Data", "ozon-category-tree.test.json")));
+        builder.Services.AddSingleton<IWindowsCredentialStore, WindowsCredentialStore>();
+        builder.Services.AddSingleton<IOzonTestSettingsStore>(provider =>
+            new OzonTestSettingsStore(
+                Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "AutoMagic",
+                    "ozon-test-settings.json"),
+                provider.GetRequiredService<IWindowsCredentialStore>()));
+        builder.Services.AddSingleton<IQwenTestSettingsStore, QwenTestSettingsStore>();
         builder.Services.AddSingleton<MainViewModel>();
         builder.Services.AddSingleton<MainWindow>();
 

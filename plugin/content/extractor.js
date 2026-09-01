@@ -72,38 +72,38 @@
       malformedDetailUrl: 0,
       nonHttpsDetailUrl: 0,
       non1688DetailUrl: 0,
+      nonOfferDetailUrl: 0,
       duplicateDetailUrl: 0,
       overLimit: 0,
     };
     const invalidDetailUrlSamples = [];
+    const unresolvedDetailCards = [];
     let validDetailUrlCount = 0;
     let upgradedHttpDetailUrlCount = 0;
 
-    for (const card of cards) {
-      const link = card.matches?.('a[href]')
-        ? card
-        : card.querySelector(selectors.productLink);
-      const rawDetailUrl = link?.href || link?.getAttribute?.('href');
-      const detailUrlResult = parseDetailUrl(rawDetailUrl);
+    for (const [cardIndex, card] of cards.entries()) {
+      const detailUrlResult = findDetailUrl(card);
       if (!detailUrlResult.url) {
         skipped[detailUrlResult.reason] += 1;
         if (invalidDetailUrlSamples.length < 3) {
           invalidDetailUrlSamples.push({
             reason: detailUrlResult.reason,
-            href: clean(rawDetailUrl)?.slice(0, 200) ?? null,
+            href: clean(detailUrlResult.rawUrl)?.slice(0, 200) ?? null,
           });
         }
-        continue;
+        if (detailUrlResult.reason !== 'nonOfferDetailUrl') continue;
       }
 
-      validDetailUrlCount += 1;
-      if (detailUrlResult.upgradedFromHttp) upgradedHttpDetailUrlCount += 1;
       const detailUrl = detailUrlResult.url;
-      if (seenDetailUrls.has(detailUrl)) {
-        skipped.duplicateDetailUrl += 1;
-        continue;
+      if (detailUrl) {
+        validDetailUrlCount += 1;
+        if (detailUrlResult.upgradedFromHttp) upgradedHttpDetailUrlCount += 1;
+        if (seenDetailUrls.has(detailUrl)) {
+          skipped.duplicateDetailUrl += 1;
+          continue;
+        }
+        seenDetailUrls.add(detailUrl);
       }
-      seenDetailUrls.add(detailUrl);
       if (products.size >= limit) {
         skipped.overLimit += 1;
         continue;
@@ -113,21 +113,49 @@
       const priceCny = clean(card.querySelector(selectors.productPrice)?.textContent);
       const image = card.querySelector(selectors.productImage);
 
-      products.set(detailUrl, {
+      const itemIndex = products.size;
+      products.set(detailUrl ?? `unresolved:${cardIndex}`, {
         detailUrl,
         imageUrl: extractImageUrl(image),
         title,
         priceCny,
       });
+      if (!detailUrl) {
+        unresolvedDetailCards.push({
+          cardIndex,
+          itemIndex,
+          title,
+          reason: detailUrlResult.reason,
+        });
+      }
+    }
+
+    function findDetailUrl(card) {
+      const links = [];
+      if (card.matches?.('a[href]')) links.push(card);
+      for (const link of card.querySelectorAll?.('a[href]') ?? []) links.push(link);
+      if (!links.length) return { url: null, rawUrl: null, reason: 'missingDetailUrl' };
+
+      const failures = [];
+      for (const link of links) {
+        const rawUrl = link?.href || link?.getAttribute?.('href');
+        const parsed = parseDetailUrl(rawUrl);
+        if (parsed.url) return { ...parsed, rawUrl };
+        failures.push({ ...parsed, rawUrl });
+      }
+      return failures.find((failure) => failure.reason === 'nonOfferDetailUrl')
+        ?? failures[0]
+        ?? { url: null, rawUrl: null, reason: 'missingDetailUrl' };
     }
 
     function parseDetailUrl(value) {
       if (!value) return { url: null, reason: 'missingDetailUrl' };
       try {
         const url = new URL(value, document.baseURI);
+        let upgradedFromHttp = false;
         if (url.protocol === 'http:' && is1688Hostname(url.hostname)) {
           url.protocol = 'https:';
-          return { url: url.href, reason: null, upgradedFromHttp: true };
+          upgradedFromHttp = true;
         }
         if (url.protocol !== 'https:') {
           return { url: null, reason: 'nonHttpsDetailUrl' };
@@ -135,10 +163,21 @@
         if (!is1688Hostname(url.hostname)) {
           return { url: null, reason: 'non1688DetailUrl' };
         }
-        return { url: url.href, reason: null, upgradedFromHttp: false };
+        if (!isOfferDetailUrl(url)) {
+          return { url: null, reason: 'nonOfferDetailUrl' };
+        }
+        return { url: url.href, reason: null, upgradedFromHttp };
       } catch {
         return { url: null, reason: 'malformedDetailUrl' };
       }
+    }
+
+    function isOfferDetailUrl(url) {
+      if (/\/offer\/\d+(?:\.html)?(?:\/|$)/i.test(url.pathname)) return true;
+      return (
+        ['detail.m.1688.com', 'm.1688.com'].includes(url.hostname) &&
+        /^\d+$/.test(url.searchParams.get('offerId') ?? '')
+      );
     }
 
     return {
@@ -155,6 +194,7 @@
         outputCount: products.size,
         skipped,
         invalidDetailUrlSamples,
+        unresolvedDetailCards,
       },
     };
   }

@@ -48,5 +48,6 @@ export function normalizeDesktopSearchEnvelope(message) {
     procurementMinimumCny: message.payload?.procurementMinimumCny,
     procurementMaximumCny: message.payload?.procurementMaximumCny,
     sortMode: message.payload?.sortMode,
+    includeDetailFacts: message.payload?.includeDetailFacts === true,
   };
 }

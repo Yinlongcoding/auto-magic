@@ -17,4 +17,10 @@
     <ProjectReference Include="..\AutoMagic.Contracts\AutoMagic.Contracts.csproj" />
     <ProjectReference Include="..\AutoMagic.Infrastructure\AutoMagic.Infrastructure.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Data\ozon-category-tree.test.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
 </Project>

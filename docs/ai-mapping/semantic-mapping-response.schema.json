@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://auto-magic.local/schemas/semantic-mapping-response.schema.json",
+  "title": "Auto Magic semantic mapping response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "requestId",
+    "targetMappings",
+    "unmappedSourceFactIds",
+    "warnings"
+  ],
+  "properties": {
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "targetMappings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/targetMapping"
+      }
+    },
+    "unmappedSourceFactIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "targetMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attributeId",
+        "attributeName",
+        "status",
+        "sourceFactIds",
+        "sourceLabels",
+        "sourceValues",
+        "candidateTextValues",
+        "selectedDictionaryValueIds",
+        "mappingMethod",
+        "confidence",
+        "dictionaryResolutionRequired",
+        "externalRuleRequired",
+        "reason"
+      ],
+      "properties": {
+        "attributeId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "attributeName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "mapped",
+            "dictionary_pending",
+            "missing_evidence",
+            "policy_required",
+            "conversion_required",
+            "ambiguous"
+          ]
+        },
+        "sourceFactIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "sourceLabels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "sourceValues": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "candidateTextValues": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "selectedDictionaryValueIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "mappingMethod": {
+          "type": "string",
+          "enum": [
+            "exact_label",
+            "semantic_label",
+            "explicit_title",
+            "category_context",
+            "policy",
+            "conversion",
+            "none"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "dictionaryResolutionRequired": {
+          "type": "boolean"
+        },
+        "externalRuleRequired": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

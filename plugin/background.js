@@ -60,7 +60,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     try {
       const request = normalizeStartRequest(message);
       const jobId = crypto.randomUUID();
-      const job = { jobId, createdTabIds: new Set(), attachedTabIds: new Set() };
+      const job = {
+        jobId,
+        createdTabIds: new Set(),
+        attachedTabIds: new Set(),
+        temporaryTabIds: new Set(),
+      };
       activeJob = job;
       void executeSearchJob(job, request);
       sendResponse({ accepted: true, jobId });
@@ -152,13 +157,18 @@ async function runSearchJob(job, request) {
     maxItems: request.maxItems,
     selectors: SELECTORS,
   });
-  await jumpToPageTop(resultTab.id);
   if (!extraction?.success) {
     throw new Error(extraction?.error || '商品DOM解析失败。');
   }
   if (!extraction.data.count) {
     throw new Error('页面已打开，但没有识别到商品卡片。');
   }
+  const detailUrlResolution = await resolveDynamicDetailUrls(
+    resultTab.id,
+    extraction.data,
+    job,
+  );
+  await jumpToPageTop(resultTab.id);
 
   let detailDom;
   if (request.includeDetailDom) {
@@ -167,7 +177,32 @@ async function runSearchJob(job, request) {
       jobId: job.jobId,
       step: '正在隐藏获取列表第2条商品的详情DOM',
     });
-    detailDom = await captureDefaultDetailDom(extraction.data.items);
+    detailDom = await captureDefaultDetailDom(
+      extraction.data.items,
+      true,
+    );
+  }
+
+  let detailSnapshot;
+  if (request.includeDetailFacts) {
+    await updateState({
+      status: 'running',
+      jobId: job.jobId,
+      step: '正在从真实Chrome详情页采集列表第2条商品',
+    });
+    const detailCapture = await captureDefaultRenderedDetail(job, extraction.data.items);
+    if (detailCapture.success) {
+      detailSnapshot = {
+        detailUrl: detailCapture.finalUrl,
+        capturedAt: detailCapture.capturedAt,
+        pageTitle: detailCapture.pageTitle,
+        facts: detailCapture.facts ?? [],
+        diagnostics: detailCapture.factDiagnostics ?? null,
+        raw: detailCapture.raw ?? null,
+      };
+    } else {
+      throw new Error(detailCapture.error || '第2条商品详情采集失败。');
+    }
   }
 
   const result = {
@@ -178,9 +213,11 @@ async function runSearchJob(job, request) {
       keyword: request.keyword,
       ...extraction.data,
       ...(detailDom === undefined ? {} : { detailDom }),
+      ...(detailSnapshot === undefined ? {} : { detailSnapshot }),
       diagnostics: {
         filterAndSort,
         scroll,
+        detailUrlResolution,
         extraction: extraction.data.diagnostics,
       },
     },
@@ -291,6 +328,14 @@ async function cleanupJob(job) {
     }
   }
   job.attachedTabIds.clear();
+  for (const tabId of job.temporaryTabIds ?? []) {
+    try {
+      await chrome.tabs.remove(tabId);
+    } catch {
+      // 临时详情标签页可能已经在采集结束时关闭。
+    }
+  }
+  job.temporaryTabIds?.clear();
   if (activeJob?.jobId === job.jobId) activeJob = null;
 }
 
@@ -1102,23 +1147,341 @@ async function jumpToPageTop(tabId) {
   }
 }
 
+async function resolveDynamicDetailUrls(tabId, extractionData, job) {
+  const allUnresolved = Array.isArray(extractionData?.diagnostics?.unresolvedDetailCards)
+    ? extractionData.diagnostics.unresolvedDetailCards
+    : [];
+  const unresolved = allUnresolved.slice(0, LIMITS.maxDynamicDetailUrlCards);
+  const report = {
+    requestedCount: unresolved.length,
+    unattemptedCount: Math.max(0, allUnresolved.length - unresolved.length),
+    resolvedCount: 0,
+    failedCount: 0,
+    remainingCount: allUnresolved.length,
+    items: [],
+  };
+  if (!unresolved.length) {
+    extractionData.diagnostics.finalValidDetailUrlCount = extractionData.items.length;
+    report.remainingCount = allUnresolved.length;
+    return report;
+  }
+
+  await updateState({
+    status: 'running',
+    jobId: job.jobId,
+    step: `正在解析 ${unresolved.length} 条广告商品的真实详情地址`,
+  });
+  for (const entry of unresolved) {
+    const item = extractionData.items?.[entry.itemIndex];
+    if (!item) {
+      report.failedCount += 1;
+      report.items.push({ ...entry, success: false, error: '商品索引无效。' });
+      continue;
+    }
+
+    try {
+      const detailUrl = await clickCardAndResolveDetailUrl(tabId, entry.cardIndex);
+      item.detailUrl = detailUrl;
+      report.resolvedCount += 1;
+      report.items.push({ ...entry, success: true, detailUrl });
+    } catch (error) {
+      report.failedCount += 1;
+      report.items.push({ ...entry, success: false, error: error.message });
+    }
+  }
+
+  extractionData.diagnostics.dynamicResolvedDetailUrlCount = report.resolvedCount;
+  extractionData.diagnostics.finalValidDetailUrlCount = extractionData.items.filter(
+    (item) => isProductDetailUrl(item?.detailUrl),
+  ).length;
+  report.remainingCount = Math.max(
+    0,
+    extractionData.items.length - extractionData.diagnostics.finalValidDetailUrlCount,
+  );
+  return report;
+}
+
+async function clickCardAndResolveDetailUrl(sourceTabId, cardIndex) {
+  const position = await sendDebuggerCommand(sourceTabId, 'Runtime.evaluate', {
+    expression: `(() => {
+      const card = document.querySelectorAll(${JSON.stringify(SELECTORS.productCard)})[${Number(cardIndex)}];
+      const target = card?.querySelector('.ad-offer-img-wrapper, .offer-title-row');
+      if (!target) return null;
+      target.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'nearest' });
+      const rect = target.getBoundingClientRect();
+      return {
+        x: Math.floor(rect.left + rect.width / 2),
+        y: Math.floor(rect.top + rect.height / 2),
+        width: rect.width,
+        height: rect.height
+      };
+    })()`,
+    returnByValue: true,
+  });
+  const point = position?.result?.value;
+  if (!point || point.width <= 0 || point.height <= 0) {
+    throw new Error('无法定位广告商品卡片的可点击区域。');
+  }
+
+  const detailTabWaiter = createProductDetailTabWaiter(
+    sourceTabId,
+    LIMITS.dynamicDetailUrlTimeoutMs,
+  );
+  try {
+    await delay(LIMITS.dynamicDetailClickDelayMs);
+    await sendDebuggerCommand(sourceTabId, 'Input.dispatchMouseEvent', {
+      type: 'mousePressed',
+      x: point.x,
+      y: point.y,
+      button: 'left',
+      clickCount: 1,
+    });
+    await sendDebuggerCommand(sourceTabId, 'Input.dispatchMouseEvent', {
+      type: 'mouseReleased',
+      x: point.x,
+      y: point.y,
+      button: 'left',
+      clickCount: 1,
+    });
+  } catch (error) {
+    detailTabWaiter.cancel();
+    await detailTabWaiter.promise.catch(() => {});
+    throw error;
+  }
+
+  const detailTab = await detailTabWaiter.promise;
+  assertTabId(detailTab.id);
+  try {
+    const detailUrl = normalizeProductDetailUrl(detailTab.url);
+    if (!detailUrl) throw new Error('广告卡片没有打开有效的1688商品详情页。');
+    return detailUrl;
+  } finally {
+    try {
+      await chrome.tabs.remove(detailTab.id);
+    } catch {
+      // 商品详情标签页可能已被用户关闭。
+    }
+    try {
+      await chrome.tabs.update(sourceTabId, { active: true });
+    } catch {
+      // 搜索标签页可能已被用户关闭。
+    }
+  }
+}
+
+function createProductDetailTabWaiter(sourceTabId, timeoutMs) {
+  let cancel = () => {};
+  const promise = new Promise((resolve, reject) => {
+    const candidateTabIds = new Set();
+    let settled = false;
+    const finish = (error, tab) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      chrome.tabs.onCreated.removeListener(onCreated);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      chrome.tabs.onRemoved.removeListener(onRemoved);
+      if (error) reject(error);
+      else resolve(tab);
+    };
+    const inspect = (tab) => {
+      if (!tab?.id || !candidateTabIds.has(tab.id)) return;
+      if (normalizeProductDetailUrl(tab.url)) finish(null, tab);
+    };
+    const onCreated = (tab) => {
+      if (tab.openerTabId !== sourceTabId) return;
+      candidateTabIds.add(tab.id);
+      inspect(tab);
+    };
+    const onUpdated = (tabId, changeInfo, tab) => {
+      if (!candidateTabIds.has(tabId)) return;
+      if (changeInfo.url || changeInfo.status === 'complete') inspect(tab);
+    };
+    const onRemoved = (tabId) => {
+      if (candidateTabIds.has(tabId)) candidateTabIds.delete(tabId);
+    };
+    const timeoutId = setTimeout(
+      () => finish(new Error('等待广告商品详情页打开超时。')),
+      timeoutMs,
+    );
+    chrome.tabs.onCreated.addListener(onCreated);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.tabs.onRemoved.addListener(onRemoved);
+    cancel = () => finish(new Error('广告商品详情页等待已取消。'));
+  });
+  return { promise, cancel };
+}
+
+function normalizeProductDetailUrl(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol === 'http:') url.protocol = 'https:';
+    return isProductDetailUrl(url.href) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function isProductDetailUrl(value) {
+  if (!isAllowed1688Url(value)) return false;
+  try {
+    const url = new URL(value);
+    return (
+      ['detail.1688.com', 'detail.m.1688.com', 'm.1688.com'].includes(
+        url.hostname.toLowerCase(),
+      ) &&
+      (/\/offer\/\d+(?:\.html)?(?:\/|$)/i.test(url.pathname) ||
+        /^\d+$/.test(url.searchParams.get('offerId') ?? ''))
+    );
+  } catch {
+    return false;
+  }
+}
+
 function formatCompletionStep(data) {
   const rawCardCount = Number(data.diagnostics?.extraction?.rawCardCount ?? 0);
   const filteredCount = Math.max(0, rawCardCount - Number(data.count ?? 0));
   const listStep = filteredCount
     ? `已获取 ${data.count} 条商品；DOM共 ${rawCardCount} 条，另有 ${filteredCount} 条未输出`
     : `已获取 ${data.count} 条商品`;
-  if (!Object.hasOwn(data, 'detailDom')) return listStep;
+  const unresolvedDetailUrlCount = Number(
+    data.diagnostics?.detailUrlResolution?.remainingCount ?? 0,
+  );
+  const linkStep = unresolvedDetailUrlCount > 0
+    ? `${listStep}；${unresolvedDetailUrlCount} 条广告商品详情地址尚未解析`
+    : listStep;
+  if (!Object.hasOwn(data, 'detailDom')) return linkStep;
   if (data.detailDom?.success) {
     const exportStep = data.detailDom.download?.state === 'complete'
       ? '已导出'
       : '已生成并开始导出';
-    return `${listStep}；第2条详情DOM${exportStep}`;
+    return `${linkStep}；第2条详情DOM${exportStep}`;
   }
-  return `${listStep}；第2条详情DOM获取失败，详见结果`;
+  return `${linkStep}；第2条详情DOM获取失败，详见结果`;
 }
 
-async function captureDefaultDetailDom(items) {
+async function captureDefaultRenderedDetail(job, items) {
+  const itemIndex = DETAIL_DOM_OPTIONS.defaultItemIndex;
+  const item = Array.isArray(items) ? items[itemIndex] : null;
+  const base = {
+    itemIndex,
+    itemPosition: itemIndex + 1,
+    productTitle: item?.title ?? null,
+    detailUrl: item?.detailUrl ?? null,
+  };
+  if (!item?.detailUrl) {
+    return { ...base, success: false, error: '列表没有可用的第2条商品详情链接。' };
+  }
+  if (!isAllowed1688Url(item.detailUrl)) {
+    return { ...base, success: false, error: '第2条商品详情链接不属于1688。' };
+  }
+
+  let tabId;
+  try {
+    const detailTab = await chrome.tabs.create({
+      url: item.detailUrl,
+      active: false,
+    });
+    assertTabId(detailTab.id);
+    tabId = detailTab.id;
+    job.temporaryTabIds ??= new Set();
+    job.temporaryTabIds.add(tabId);
+
+    await waitForTabComplete(tabId, DETAIL_DOM_OPTIONS.renderedPageTimeoutMs);
+    const loadedTab = await chrome.tabs.get(tabId);
+    if (!isAllowed1688Url(loadedTab.url)) {
+      throw new Error(`详情页跳转到了不受信任的地址：${loadedTab.url || '未知地址'}`);
+    }
+
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['content/detail-extractor.js'],
+    });
+    const extraction = await waitForRenderedDetailExtraction(
+      tabId,
+      DETAIL_DOM_OPTIONS.renderedPageTimeoutMs,
+    );
+    if (!isAllowed1688Url(extraction.finalUrl)) {
+      throw new Error('详情采集结果中的最终地址不属于1688。');
+    }
+
+    return {
+      ...base,
+      success: true,
+      mode: 'rendered-chrome-tab',
+      requestedUrl: item.detailUrl,
+      finalUrl: extraction.finalUrl,
+      capturedAt: extraction.capturedAt,
+      pageTitle: extraction.pageTitle,
+      facts: extraction.facts ?? [],
+      raw: extraction.raw ?? null,
+      factDiagnostics: extraction.diagnostics ?? null,
+    };
+  } catch (error) {
+    return { ...base, success: false, error: error.message };
+  } finally {
+    if (Number.isInteger(tabId)) {
+      job.temporaryTabIds?.delete(tabId);
+      try {
+        await chrome.tabs.remove(tabId);
+      } catch {
+        // 用户可能在采集完成前主动关闭了临时详情标签页。
+      }
+    }
+  }
+}
+
+async function waitForRenderedDetailExtraction(tabId, timeoutMs) {
+  const startedAt = Date.now();
+  let attempts = 0;
+  let latestDiagnostics = null;
+  let latestError = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    attempts += 1;
+    try {
+      const response = await chrome.tabs.sendMessage(tabId, {
+        type: 'EXTRACT_1688_RENDERED_DETAIL',
+        options: {
+          maxFacts: DETAIL_DOM_OPTIONS.maxFacts,
+          maxImages: DETAIL_DOM_OPTIONS.maxImages,
+          maxPriceTexts: DETAIL_DOM_OPTIONS.maxPriceTexts,
+          maxSkuTexts: DETAIL_DOM_OPTIONS.maxSkuTexts,
+        },
+      });
+      if (!response?.success) {
+        latestError = response?.error || '详情页解析器没有返回有效结果。';
+      } else {
+        latestDiagnostics = response.data?.diagnostics ?? null;
+        if (latestDiagnostics?.blocked) {
+          throw new Error('1688详情页触发了验证码或访问限制。');
+        }
+        if (response.data?.ready) {
+          return {
+            ...response.data,
+            diagnostics: {
+              ...latestDiagnostics,
+              attempts,
+              waitMs: Date.now() - startedAt,
+            },
+          };
+        }
+      }
+    } catch (error) {
+      if (/验证码|访问限制/.test(error.message)) throw error;
+      latestError = error.message;
+    }
+    await delay(DETAIL_DOM_OPTIONS.renderedPollDelayMs);
+  }
+
+  const diagnostics = latestDiagnostics
+    ? `；最后诊断：${JSON.stringify(latestDiagnostics)}`
+    : '';
+  const reason = latestError ? `；最后错误：${latestError}` : '';
+  throw new Error(`等待1688详情属性渲染超时${diagnostics}${reason}`);
+}
+
+async function captureDefaultDetailDom(items, exportRawDom = true) {
   const itemIndex = DETAIL_DOM_OPTIONS.defaultItemIndex;
   const item = Array.isArray(items) ? items[itemIndex] : null;
   const base = {
@@ -1140,13 +1503,26 @@ async function captureDefaultDetailDom(items) {
       target: 'offscreen',
       type: 'PARSE_1688_DETAIL_DOM',
       detailUrl: item.detailUrl,
-      options: DETAIL_DOM_OPTIONS,
+      options: {
+        ...DETAIL_DOM_OPTIONS,
+        createDownload: exportRawDom,
+        includeStructure: exportRawDom,
+      },
     });
     if (!response?.success) {
       throw new Error(response?.error || '隐藏详情DOM解析失败。');
     }
 
     const { downloadUrl, structure, ...metadata } = response.data;
+    if (!exportRawDom) {
+      await closeOffscreenDocument();
+      return {
+        ...base,
+        success: true,
+        mode: 'fetched-html',
+        ...metadata,
+      };
+    }
     const filename = createDetailDomFilename(metadata.finalUrl, itemIndex);
     const downloadId = await chrome.downloads.download({
       url: downloadUrl,
@@ -1440,6 +1816,7 @@ function handleNativeMessage(message) {
       procurementMinimumCny: desktopRequest.procurementMinimumCny,
       procurementMaximumCny: desktopRequest.procurementMaximumCny,
       sortMode: desktopRequest.sortMode,
+      includeDetailFacts: desktopRequest.includeDetailFacts,
     });
     const jobId = crypto.randomUUID();
     const job = {
@@ -1447,6 +1824,7 @@ function handleNativeMessage(message) {
       desktopRequestId: desktopRequest.requestId,
       createdTabIds: new Set(),
       attachedTabIds: new Set(),
+      temporaryTabIds: new Set(),
     };
     activeJob = job;
     postNativeMessage(createNativeEnvelope(

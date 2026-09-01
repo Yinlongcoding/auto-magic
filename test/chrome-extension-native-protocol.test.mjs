@@ -25,6 +25,7 @@ test('normalizes a desktop search request', () => {
     procurementMinimumCny: undefined,
     procurementMaximumCny: undefined,
     sortMode: undefined,
+    includeDetailFacts: false,
   });
 });
 
@@ -39,6 +40,7 @@ test('keeps procurement range and sort mode from a desktop search request', () =
       procurementMinimumCny: 40,
       procurementMaximumCny: 64,
       sortMode: 'sales',
+      includeDetailFacts: true,
     },
   });
 
@@ -49,6 +51,7 @@ test('keeps procurement range and sort mode from a desktop search request', () =
     procurementMinimumCny: 40,
     procurementMaximumCny: 64,
     sortMode: 'sales',
+    includeDetailFacts: true,
   });
 });
 
