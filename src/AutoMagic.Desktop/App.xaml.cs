@@ -47,6 +47,12 @@ public partial class App : System.Windows.Application
             client.Timeout = TimeSpan.FromSeconds(20);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("AutoMagic/0.2");
         }).RedactLoggedHeaders(_ => true);
+        builder.Services.AddHttpClient<IOzonDictionaryService, OzonDictionaryService>(client =>
+        {
+            client.BaseAddress = new Uri("https://api-seller.ozon.ru/");
+            client.Timeout = TimeSpan.FromSeconds(60);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("AutoMagic/0.2");
+        }).RedactLoggedHeaders(_ => true);
         builder.Services.AddHttpClient<IQwenSemanticMappingService, QwenSemanticMappingService>(client =>
         {
             client.BaseAddress = new Uri(QwenMappingRuntime.SharedBaseUrl);

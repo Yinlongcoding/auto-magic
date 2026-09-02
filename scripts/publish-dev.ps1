@@ -26,6 +26,8 @@ Write-Host "Using .NET SDK $sdkVersion from $dotnetPath"
 
 $desktopOutput = Join-Path $projectRoot 'artifacts\desktop'
 $nativeHostOutput = Join-Path $projectRoot 'artifacts\native-host'
+$catalogSource = Join-Path $projectRoot 'src\AutoMagic.Desktop\Data\ozon-category-tree.test.json'
+$catalogDestination = Join-Path $desktopOutput 'Data\ozon-category-tree.test.json'
 
 & $dotnetPath publish (Join-Path $projectRoot 'src\AutoMagic.Desktop\AutoMagic.Desktop.csproj') `
     --configuration Release `
@@ -35,6 +37,17 @@ $nativeHostOutput = Join-Path $projectRoot 'artifacts\native-host'
     -p:PublishSingleFile=true `
     -p:IncludeNativeLibrariesForSelfExtract=true
 if ($LASTEXITCODE -ne 0) { throw 'Desktop publish failed.' }
+
+if (-not (Test-Path -LiteralPath $catalogSource -PathType Leaf)) {
+    throw "Ozon test category catalog was not found: $catalogSource"
+}
+
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $catalogDestination) | Out-Null
+Copy-Item -LiteralPath $catalogSource -Destination $catalogDestination -Force
+if (-not (Test-Path -LiteralPath $catalogDestination -PathType Leaf)) {
+    throw "Ozon test category catalog was not copied to publish output: $catalogDestination"
+}
+Write-Host "Ozon test category catalog: $catalogDestination"
 
 & $dotnetPath publish (Join-Path $projectRoot 'src\AutoMagic.NativeHost\AutoMagic.NativeHost.csproj') `
     --configuration Release `

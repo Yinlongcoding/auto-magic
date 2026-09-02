@@ -1,10 +1,10 @@
 # Auto Magic 项目交接文档
 
-> 交接日期：2026-09-02
+> 交接日期：2026-09-03
 > 当前分支：`main`
 > 支持平台：Windows 10/11 x64
 > Chrome 插件版本：`v0.1.10`
-> 当前阶段：1688 列表/详情采集、Ozon 动态 Schema、Qwen 语义映射候选链路已接通；尚未进入最终 Ozon 发布
+> 当前阶段：1688 列表/详情采集、Ozon 动态 Schema、Ozon 参考值查询、Qwen 语义映射候选链路已接通；尚未进入最终 Ozon 发布
 
 ## 1. 换机后先看这里
 
@@ -109,9 +109,18 @@ docs/ai-mapping/                     Qwen Skill、Prompt、Schema、样本和运
 - 当前快照为中文版：26 个顶级目录、568 个品类节点、7,365 个商品类型；仅用于流程验证，不是永久生产目录。
 - UI 中品类与类型 ID 均为选择式。
 - 使用 Ozon `Client-Id` 和 `Api-Key` 请求选定品类/类型的动态属性，并生成属性覆盖报告。
-- 当前属性 Schema 接口 `/v1/description-category/attribute` 一次返回完整 `result`，实现没有伪造分页参数；字典值接口的分页属于下一阶段。具体实现与测试见 `OzonSchemaService` 和 `OzonSchemaServiceTests`。
+- 当前属性 Schema 接口 `/v1/description-category/attribute` 一次返回完整 `result`，实现没有伪造分页参数；参考值查询与完整字典分页分别由 `OzonDictionaryService` 提供。具体实现与测试见 `OzonSchemaService`、`OzonDictionaryService` 及对应测试。
 
-### 6.3 Qwen 语义映射
+### 6.3 Ozon 参考值查询与映射过滤
+
+- `IOzonDictionaryService.SearchAttributeValuesAsync` 已接入 `/v1/description-category/attribute/values/search`，使用当前 Ozon Client ID/API Key 查询真实参考值，并只保留 Ozon 返回的 `id/value`。
+- Qwen 映射结果按依赖过滤：只有 `DictionaryResolutionRequired=true`、目标属性有 `DictionaryId`、尚未选择字典 ID 且存在文本候选时才发起查询；非字典属性或已经具备合法字典 ID 的映射不会重复查询。
+- 每个候选文本单独查询，结果按 `valueId` 去重，再作为白名单候选重新提交给 Qwen；本地验证器禁止模型选择未进入候选白名单的 ID。
+- `GetAttributeValuesAsync` 的完整字典分页能力仍保留，当前复核路径优先使用按候选查询接口，避免无关属性的全量读取。
+- 已用真实 Ozon 返回确认女装属性 `4295`（字典 `835`）的候选包含数字俄罗斯尺码及 ID，例如 `42→35545`、`44→35428`、`46→35429`、`48→35430`，另有 `通用→35646`；这些是 Ozon 字典事实，不代表源尺码自动换算规则。
+- 对 `S/M/L/XL` 的转换仍必须依赖商品实际尺码表或用户确认的规则，不能由字典查询器自行推断。
+
+### 6.4 Qwen 语义映射
 
 已实现从界面主动发起的第一版真实 API 调用链路：
 
@@ -187,11 +196,12 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ## 9. 测试基线
 
-交接前最近一次完整自动化测试结果：
+交接前最近一次自动化测试结果：
 
-- .NET：35 通过，0 失败。
-- Chrome 插件 Node 测试：22 通过，0 失败。
-- 合计：57 通过，0 失败。
+- .NET：45 通过，0 失败（2026-09-03，包含 Ozon 参考值搜索测试）。
+- Chrome 插件 Node 测试：22 通过，0 失败（此前基线；本机当前未安装 `node`，本次未重跑）。
+- 已知合计基线：67 通过，0 失败。
+- 桌面端 Debug 构建成功；本次未重新执行 self-contained Release 发布。
 - Release 桌面构建和 `win-x64` self-contained 发布成功。
 - 本次交接环境无法连接 NuGet 漏洞数据源，发布时出现 `NU1900` 审计警告；包恢复与编译仍成功。换机联网后应重新发布并确认漏洞审计结果。
 
@@ -207,8 +217,8 @@ node --test .\test\*.test.mjs
 ## 10. 当前尚未完成
 
 1. 尚未使用用户真实百炼 Key 完成 UI 端到端调用验收；当前服务有 fake handler 单元测试和严格校验测试。
-2. 尚未实现 Ozon 属性字典值接口、分页缓存和候选值缩窄。字典字段现在只能停在 `dictionary_pending`。
-3. 尚未实现俄罗斯尺码等确定性转换规则。
+2. Ozon 属性参考值按候选查询和本地白名单缩窄已实现；完整字典缓存、失败重试和发布前最终编译仍未完成。
+3. 尚未将俄罗斯尺码等源值转换规则接入最终发布路径；当前 `RussianSizeRuleCatalog` 仅为测试参考，不能视为 Ozon 官方通用规则。
 4. 尚未冻结“合并至一张卡片”等运营策略。
 5. 尚未将通过校验的映射编译为最终 Ozon 发布参数。
 6. 尚未实现品类映射方案本地版本化、云端备份和“同品类新版本覆盖旧备份”。
@@ -225,8 +235,8 @@ node --test .\test\*.test.mjs
 3. 选择测试品类/类型，读取 Ozon Schema。
 4. 搜索一次 1688 商品并确认返回第 2 条详情事实。
 5. 点击“执行AI映射”，保存请求 JSON、原始响应、验证结果和 Token 用量用于评审；不要保存 API Key。
-6. 确认真实调用稳定后，实现 Ozon `/v1/description-category/attribute/values` 字典分页、缓存和候选缩窄。
-7. 将字典候选交给 Qwen 或本地匹配器，再由确定性编译器输出最终属性值。
+6. 用真实账户复核 `/v1/description-category/attribute/values/search` 的候选查询、无候选和鉴权失败路径；必要时再实现完整字典缓存。
+7. 在有商品尺码表证据的前提下，实现逐 SKU 尺码转换，再由确定性编译器输出最终属性值。
 8. 最后设计映射方案版本、品类级复用和云端替换式备份。
 
 ## 12. 不得回退的验收约束

@@ -19,6 +19,7 @@ public partial class MainViewModel : ObservableObject
     private readonly IOzonSchemaService _ozonSchemaService;
     private readonly ILocalOzonCategoryCatalog _ozonCategoryCatalog;
     private readonly IOzonTestSettingsStore _ozonTestSettingsStore;
+    private readonly IOzonDictionaryService _ozonDictionaryService;
     private readonly IQwenSemanticMappingService _qwenMappingService;
     private readonly IQwenTestSettingsStore _qwenTestSettingsStore;
     private readonly Dispatcher _dispatcher;
@@ -30,6 +31,7 @@ public partial class MainViewModel : ObservableObject
     private bool _isRestoringOzonSettings;
     private CancellationTokenSource? _qwenSettingsSaveDebounce;
     private bool _isRestoringQwenSettings;
+    private SemanticMappingResponse? _latestQwenMappingResponse;
 
     [ObservableProperty]
     private string _keyword = "连衣裙";
@@ -131,6 +133,9 @@ public partial class MainViewModel : ObservableObject
     private bool _isRunningQwenMapping;
 
     [ObservableProperty]
+    private bool _isResolvingQwenDictionaries;
+
+    [ObservableProperty]
     private string _qwenMappingStatus = "请先准备 Ozon Schema、1688详情事实和百炼API Key。";
 
     [ObservableProperty]
@@ -139,12 +144,16 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _qwenRawResponseJson = "尚未调用Qwen。";
 
+    [ObservableProperty]
+    private string _qwenDictionaryStatus = "首次映射通过校验后，可搜索 Ozon 参考值并再次复核。";
+
     public MainViewModel(
         ISearchBridge searchBridge,
         IExchangeRateService exchangeRateService,
         IOzonSchemaService ozonSchemaService,
         ILocalOzonCategoryCatalog ozonCategoryCatalog,
         IOzonTestSettingsStore ozonTestSettingsStore,
+        IOzonDictionaryService ozonDictionaryService,
         IQwenSemanticMappingService qwenMappingService,
         IQwenTestSettingsStore qwenTestSettingsStore)
     {
@@ -153,6 +162,7 @@ public partial class MainViewModel : ObservableObject
         _ozonSchemaService = ozonSchemaService;
         _ozonCategoryCatalog = ozonCategoryCatalog;
         _ozonTestSettingsStore = ozonTestSettingsStore;
+        _ozonDictionaryService = ozonDictionaryService;
         _qwenMappingService = qwenMappingService;
         _qwenTestSettingsStore = qwenTestSettingsStore;
         _dispatcher = Dispatcher.CurrentDispatcher;
@@ -587,6 +597,7 @@ public partial class MainViewModel : ObservableObject
 
     private bool CanRunQwenMapping() =>
         !IsRunningQwenMapping &&
+        !IsResolvingQwenDictionaries &&
         !IsBusy &&
         !string.IsNullOrWhiteSpace(QwenApiKey) &&
         _ozonSchema is not null &&
@@ -607,6 +618,7 @@ public partial class MainViewModel : ObservableObject
         }
 
         IsRunningQwenMapping = true;
+        _latestQwenMappingResponse = null;
         QwenMappings.Clear();
         QwenValidationIssues.Clear();
         QwenRawResponseJson = "等待百炼返回映射结果…";
@@ -634,10 +646,18 @@ public partial class MainViewModel : ObservableObject
 
             if (result.Validation.Response is { } response)
             {
+                _latestQwenMappingResponse = response;
                 foreach (var mapping in response.TargetMappings)
                 {
                     QwenMappings.Add(mapping);
                 }
+
+        QwenDictionaryStatus = "首次映射已通过本地校验；可以搜索 Ozon 参考值并再次复核。";
+            }
+            else
+            {
+                _latestQwenMappingResponse = null;
+                QwenDictionaryStatus = "首次映射未通过本地校验，暂不读取字典候选。";
             }
 
             var tokenText = result.Usage.TotalTokens > 0
@@ -662,6 +682,141 @@ public partial class MainViewModel : ObservableObject
             IsRunningQwenMapping = false;
         }
     }
+
+    private bool CanResolveQwenDictionaries() =>
+        !IsRunningQwenMapping &&
+        !IsResolvingQwenDictionaries &&
+        !IsBusy &&
+        !string.IsNullOrWhiteSpace(QwenApiKey) &&
+        !string.IsNullOrWhiteSpace(OzonClientId) &&
+        !string.IsNullOrWhiteSpace(OzonApiKey) &&
+        _ozonSchema is not null &&
+        _latestDetailSnapshot is not null &&
+        _latestQwenMappingResponse is not null &&
+        _latestQwenMappingResponse.TargetMappings.Any(mapping =>
+            mapping.CandidateTextValues.Count > 0 &&
+            _ozonSchema.Attributes.Any(attribute =>
+                attribute.Id == mapping.AttributeId && attribute.DictionaryId > 0));
+
+    [RelayCommand(CanExecute = nameof(CanResolveQwenDictionaries))]
+    private async Task ResolveQwenDictionariesAsync()
+    {
+        if (_ozonSchema is null ||
+            _latestDetailSnapshot is null ||
+            _latestQwenMappingResponse is null ||
+            SelectedOzonCategory is null ||
+            SelectedOzonType is null)
+        {
+            QwenDictionaryStatus = "请先完成一次通过本地校验的 AI 映射。";
+            return;
+        }
+
+        IsResolvingQwenDictionaries = true;
+        QwenDictionaryStatus = "正在按未解决的文本候选搜索 Ozon 参考值…";
+        try
+        {
+            var candidates = await LoadDictionaryCandidatesAsync(_latestQwenMappingResponse);
+            var request = SemanticMappingRequestFactory.CreateRequiredAttributeRequest(
+                $"automagic-{Guid.NewGuid():N}",
+                $"{SelectedOzonCategory.DisplayName} > {SelectedOzonType.Name}",
+                _ozonSchema,
+                _latestDetailSnapshot,
+                candidates);
+            QwenRequestJson = JsonSerializer.Serialize(request, SemanticMappingJson.IndentedOptions);
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+            var result = await _qwenMappingService.MapAsync(
+                new QwenApiCredentials(QwenApiKey),
+                request,
+                timeout.Token);
+            QwenRawResponseJson = result.RawContent;
+            QwenMappings.Clear();
+            QwenValidationIssues.Clear();
+            foreach (var issue in result.Validation.Issues)
+            {
+                QwenValidationIssues.Add(issue);
+            }
+
+            if (result.Validation.Response is { } response)
+            {
+                _latestQwenMappingResponse = response;
+                foreach (var mapping in response.TargetMappings)
+                {
+                    QwenMappings.Add(mapping);
+                }
+            }
+
+            var candidateAttributeCount = candidates.Count;
+            var tokenText = result.Usage.TotalTokens > 0
+                ? $"Token {result.Usage.PromptTokens}+{result.Usage.CompletionTokens}={result.Usage.TotalTokens}"
+                : "服务未返回Token统计";
+            QwenDictionaryStatus = result.Validation.IsValid
+                ? $"Ozon 参考值搜索并复核完成：已提供 {candidateAttributeCount} 个属性的候选；{tokenText}。"
+                : $"Ozon 参考值复核返回但未通过本地校验：{QwenValidationIssues.Count}项问题；{tokenText}。";
+        }
+        catch (OperationCanceledException)
+        {
+            QwenDictionaryStatus = "字典读取或复核请求已取消或超过120秒。";
+        }
+        catch (Exception error)
+        {
+            QwenDictionaryStatus = $"字典候选解析失败：{error.Message}";
+        }
+        finally
+        {
+            IsResolvingQwenDictionaries = false;
+            ResolveQwenDictionariesCommand.NotifyCanExecuteChanged();
+            RunQwenMappingCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private async Task<IReadOnlyDictionary<long, IReadOnlyList<SemanticDictionaryCandidate>>> LoadDictionaryCandidatesAsync(
+        SemanticMappingResponse response)
+    {
+        var candidates = new Dictionary<long, IReadOnlyList<SemanticDictionaryCandidate>>();
+        var attributes = _ozonSchema!.Attributes.ToDictionary(attribute => attribute.Id);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+
+        foreach (var mapping in response.TargetMappings)
+        {
+            if (!attributes.TryGetValue(mapping.AttributeId, out var attribute) ||
+                attribute.DictionaryId <= 0 ||
+                !NeedsDictionaryLookup(mapping))
+            {
+                continue;
+            }
+
+            var values = new List<OzonDictionaryValue>();
+            foreach (var candidateText in mapping.CandidateTextValues)
+            {
+                values.AddRange(await _ozonDictionaryService.SearchAttributeValuesAsync(
+                    new OzonTemporaryCredentials(OzonClientId, OzonApiKey),
+                    _ozonSchema.DescriptionCategoryId,
+                    _ozonSchema.TypeId,
+                    attribute.Id,
+                    candidateText,
+                    timeout.Token));
+            }
+
+            var narrowed = SemanticDictionaryCandidateResolver.Resolve(
+                mapping.CandidateTextValues,
+                values
+                    .GroupBy(value => value.ValueId)
+                    .Select(group => group.First())
+                    .ToArray());
+            if (narrowed.Count > 0)
+            {
+                candidates[attribute.Id] = narrowed;
+            }
+        }
+
+        return candidates;
+    }
+
+    private static bool NeedsDictionaryLookup(SemanticTargetMapping mapping) =>
+        mapping.DictionaryResolutionRequired &&
+        mapping.SelectedDictionaryValueIds.Count == 0 &&
+        mapping.CandidateTextValues.Count > 0;
 
     private void RefreshAttributeCoverage()
     {
@@ -749,15 +904,23 @@ public partial class MainViewModel : ObservableObject
     partial void OnIsRunningQwenMappingChanged(bool value) =>
         RunQwenMappingCommand.NotifyCanExecuteChanged();
 
+    partial void OnIsResolvingQwenDictionariesChanged(bool value)
+    {
+        RunQwenMappingCommand.NotifyCanExecuteChanged();
+        ResolveQwenDictionariesCommand.NotifyCanExecuteChanged();
+    }
+
     partial void OnOzonClientIdChanged(string value)
     {
         LoadOzonSchemaCommand.NotifyCanExecuteChanged();
+        ResolveQwenDictionariesCommand.NotifyCanExecuteChanged();
         ScheduleOzonSettingsSave();
     }
 
     partial void OnOzonApiKeyChanged(string value)
     {
         LoadOzonSchemaCommand.NotifyCanExecuteChanged();
+        ResolveQwenDictionariesCommand.NotifyCanExecuteChanged();
         ScheduleOzonSettingsSave();
     }
 
@@ -807,12 +970,15 @@ public partial class MainViewModel : ObservableObject
 
     private void ResetQwenMappingOutput(string status)
     {
+        _latestQwenMappingResponse = null;
         QwenMappings.Clear();
         QwenValidationIssues.Clear();
         QwenRequestJson = "尚未生成Qwen映射请求。";
         QwenRawResponseJson = "尚未调用Qwen。";
         QwenMappingStatus = status;
+        QwenDictionaryStatus = "首次映射通过校验后，可搜索 Ozon 参考值并再次复核。";
         RunQwenMappingCommand.NotifyCanExecuteChanged();
+        ResolveQwenDictionariesCommand.NotifyCanExecuteChanged();
     }
 
     private void RefreshQwenReadinessStatus()

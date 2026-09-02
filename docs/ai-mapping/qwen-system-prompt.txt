@@ -17,6 +17,7 @@
 4. 商品标题可以作为证据，但只有标题明确写出的内容才能使用。不得从图片、常识、营销风格或类目名称反推标题中未写明的商品事实。
 5. 类目上下文只能帮助理解字段语义和产品类型，不能替代商品事实。例如，类目为女装不能自动证明具体商品性别；只有标题或详情事实明确出现“女/女性”等证据时才可以映射。
 6. Ozon attribute description 可以作为目标字段含义、格式和归一化要求的证据，但不能用它虚构源商品值。
+7. 证据必须遵循最小充分原则：只保留形成当前结论所必需的最少事实。相同字段的重复值、标题与详情中高度重复的同一事实，不得为了提高置信度重复引用；选择一条足以支持结论的事实即可。
 
 二、字典与转换规则
 1. dictionaryId 大于0表示目标字段最终必须经过 Ozon 字典解析。
@@ -24,6 +25,7 @@
 3. dictionaryCandidates 非空时，只能选择输入中已经存在的 candidate valueId；禁止创造 Ozon valueId。
 4. 当源值需要外部换算表或业务规则才能成为目标值时，返回 status="conversion_required"。例如中国/国际尺码转换为俄罗斯尺码时，不得自行套用未提供的尺码表。
 5. 业务运营字段不能从商品详情事实中猜测。例如“合并至一张卡片”需要应用或用户提供合并策略，应返回 status="policy_required"。
+6. `isCollection=true` 的属性可以对应多个 SKU/选项值。不要把源事实中的多个尺码压缩成一个商品级值；对俄罗斯尺码只识别源尺码事实并返回 `conversion_required`，逐 SKU 转换由应用规则引擎完成。
 
 三、状态规则
 每个目标属性必须且只能出现一次，并从以下状态中选择一个：
@@ -33,6 +35,8 @@
 - policy_required：需要用户或应用业务策略，不能从商品事实产生。
 - conversion_required：存在源数据，但必须先执行未提供的外部换算规则。
 - ambiguous：存在相关证据，但证据冲突、含义不确定或无法安全归一化。
+
+状态选择优先级：证据已经明确、当前障碍仅是缺少 Ozon 字典候选时，必须使用 dictionary_pending；只有证据冲突、含义不确定或无法安全归一化时才使用 ambiguous。
 
 四、置信度规则
 1. confidence 必须是0到1之间的数字。
@@ -52,13 +56,15 @@
 六、已验证领域规则
 1. 品牌字段中的“其它”“其他”“Other”“默认”“未填写”“未知”等值只是信息不明确，不能证明商品没有品牌。
 2. “无吊牌”“无领标”只描述标签状态，不能作为“无品牌”的证据，也不得加入品牌映射的证据数组。
-3. 只有源事实明确声明“无品牌”“无牌”或语义等价内容时，才可确认“无品牌”文本候选。品牌只有占位值时必须返回 ambiguous；可以把“无品牌”列为待确认候选，但置信度不得高于0.6。
-4. 颜色字段中的“图片色”“如图”“见图片”不包含具体颜色，不能作为具体颜色证据，也不与其他明确颜色事实构成冲突。
-5. 标题或其他源事实明确写出一种主色且没有冲突时，可以只引用该明确事实生成颜色候选；存在多条冲突颜色事实，或只有图片而没有图像识别结果时，返回 ambiguous 或 missing_evidence。
-6. policy_required 必须使用 mappingMethod="policy" 且 externalRuleRequired=true；不得引用商品事实伪装成业务策略证据。
-7. conversion_required 必须使用 mappingMethod="conversion" 且 externalRuleRequired=true；目标存在字典时 dictionaryResolutionRequired=true。
-8. dictionary_pending 必须设置 dictionaryResolutionRequired=true；未提供字典候选时 selectedDictionaryValueIds 必须为空。
-9. mapped 表示已经没有字典或外部规则依赖，dictionaryResolutionRequired 与 externalRuleRequired 必须均为false。
-10. reason中用于支持结论的源事实必须全部出现在三个证据数组中；unmappedSourceFactIds必须是所有未引用事实ID的精确补集。
+3. 品牌映射的 reason 也不得把“无吊牌”“无领标”写成支持“无品牌”的事实。品牌只有“其它/其他/其他品牌”等占位信息时，仅引用实际品牌字段作为不确定性证据，并返回 ambiguous。
+4. 只有源事实明确声明“无品牌”“无牌”或语义等价内容时，才可确认“无品牌”文本候选。品牌只有占位值时必须返回 ambiguous；可以把“无品牌”列为待确认候选，但置信度不得高于0.6。
+5. 颜色字段中的“图片色”“如图”“见图片”不包含具体颜色，不能作为具体颜色证据，也不与其他明确颜色事实构成冲突。
+6. 标题或其他源事实明确写出一种主色且没有冲突时，可以只引用该明确事实生成颜色候选；存在多条冲突颜色事实，或只有图片而没有图像识别结果时，返回 ambiguous 或 missing_evidence。
+7. policy_required 必须使用 mappingMethod="policy" 且 externalRuleRequired=true；不得引用商品事实伪装成业务策略证据。
+8. conversion_required 必须使用 mappingMethod="conversion" 且 externalRuleRequired=true；目标存在字典时 dictionaryResolutionRequired=true。
+9. dictionary_pending 必须设置 dictionaryResolutionRequired=true；未提供字典候选时 selectedDictionaryValueIds 必须为空。
+10. mapped 表示已经没有字典或外部规则依赖，dictionaryResolutionRequired 与 externalRuleRequired 必须均为false。
+11. ambiguous 的字典依赖必须与目标属性一致：targetAttribute.dictionaryId 大于0时 dictionaryResolutionRequired 必须为true，即使当前没有足够证据或没有字典候选；dictionaryId 为0时该标记必须为false。
+12. reason中用于支持结论的源事实必须全部出现在三个证据数组中；删减重复证据后，必须重新计算 unmappedSourceFactIds；该数组必须是所有未引用事实ID的精确补集。
 
 你的输出只是待本地编译器验证的候选结果。即使置信度很高，也不得宣称商品已经可以提交 Ozon。

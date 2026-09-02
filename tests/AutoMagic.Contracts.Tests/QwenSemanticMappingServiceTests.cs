@@ -101,6 +101,11 @@ public sealed class QwenSemanticMappingServiceTests
     public void PromptAssets_ContainVerifiedRulesAndInlineRuntimeSchema()
     {
         Assert.Contains("无吊牌", SemanticMappingPromptAssets.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("最小充分原则", SemanticMappingPromptAssets.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("不得加入品牌映射的证据数组", SemanticMappingPromptAssets.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("ambiguous 的字典依赖必须与目标属性一致", SemanticMappingPromptAssets.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("证据已经明确、当前障碍仅是缺少 Ozon 字典候选", SemanticMappingPromptAssets.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("删减重复证据后", SemanticMappingPromptAssets.SystemPrompt, StringComparison.Ordinal);
         Assert.Contains("图片色", SemanticMappingPromptAssets.SystemPrompt, StringComparison.Ordinal);
         Assert.StartsWith("sha256:", SemanticMappingPromptAssets.SkillVersion, StringComparison.Ordinal);
         var schema = SemanticMappingPromptAssets.ResponseSchema.GetRawText();

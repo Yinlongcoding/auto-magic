@@ -488,11 +488,17 @@
                                     Margin="0,0,12,8"
                                     Style="{StaticResource SecondaryButtonStyle}"
                                     Click="OnClearQwenCredentials" />
-                            <Button Grid.Row="1" Grid.Column="3"
-                                    Content="执行 AI 映射"
-                                    Margin="0,0,0,8"
-                                    Padding="16,7"
-                                    Command="{Binding RunQwenMappingCommand}" />
+                            <StackPanel Grid.Row="1" Grid.Column="3"
+                                        Orientation="Horizontal"
+                                        Margin="0,0,0,8">
+                                <Button Content="执行 AI 映射"
+                                        Margin="0,0,8,0"
+                                        Padding="16,7"
+                                        Command="{Binding RunQwenMappingCommand}" />
+                                <Button Content="读取字典并复核"
+                                        Padding="16,7"
+                                        Command="{Binding ResolveQwenDictionariesCommand}" />
+                            </StackPanel>
 
                             <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4"
                                        Text="API Key仅保存在当前Windows用户的Credential Manager。只有点击“执行AI映射”才会调用百炼并产生Token费用；未通过本地校验的响应不会写入映射库。"
@@ -503,9 +509,15 @@
 
                     <Border Grid.Row="1" Padding="14,10" Margin="0,10"
                             Background="#E8EEF8" CornerRadius="8">
-                        <TextBlock Text="{Binding QwenMappingStatus}"
-                                   Foreground="#374151"
-                                   TextWrapping="Wrap" />
+                        <StackPanel>
+                            <TextBlock Text="{Binding QwenMappingStatus}"
+                                       Foreground="#374151"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding QwenDictionaryStatus}"
+                                       Margin="0,6,0,0"
+                                       Foreground="#4B5563"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
                     </Border>
 
                     <TabControl Grid.Row="2">
