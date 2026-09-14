@@ -65,47 +65,13 @@
     const limit = Number.isInteger(maxItems) && maxItems > 0 ? maxItems : 60;
 
     const cards = [...document.querySelectorAll(selectors.productCard)];
-    const products = new Map();
-    const seenDetailUrls = new Set();
-    const skipped = {
-      missingDetailUrl: 0,
-      malformedDetailUrl: 0,
-      nonHttpsDetailUrl: 0,
-      non1688DetailUrl: 0,
-      nonOfferDetailUrl: 0,
-      duplicateDetailUrl: 0,
-      overLimit: 0,
-    };
-    const invalidDetailUrlSamples = [];
+    const products = [];
     const unresolvedDetailCards = [];
-    let validDetailUrlCount = 0;
-    let upgradedHttpDetailUrlCount = 0;
 
     for (const [cardIndex, card] of cards.entries()) {
       const detailUrlResult = findDetailUrl(card);
-      if (!detailUrlResult.url) {
-        skipped[detailUrlResult.reason] += 1;
-        if (invalidDetailUrlSamples.length < 3) {
-          invalidDetailUrlSamples.push({
-            reason: detailUrlResult.reason,
-            href: clean(detailUrlResult.rawUrl)?.slice(0, 200) ?? null,
-          });
-        }
-        if (detailUrlResult.reason !== 'nonOfferDetailUrl') continue;
-      }
-
       const detailUrl = detailUrlResult.url;
-      if (detailUrl) {
-        validDetailUrlCount += 1;
-        if (detailUrlResult.upgradedFromHttp) upgradedHttpDetailUrlCount += 1;
-        if (seenDetailUrls.has(detailUrl)) {
-          skipped.duplicateDetailUrl += 1;
-          continue;
-        }
-        seenDetailUrls.add(detailUrl);
-      }
-      if (products.size >= limit) {
-        skipped.overLimit += 1;
+      if (products.length >= limit) {
         continue;
       }
 
@@ -113,8 +79,9 @@
       const priceCny = clean(card.querySelector(selectors.productPrice)?.textContent);
       const image = card.querySelector(selectors.productImage);
 
-      const itemIndex = products.size;
-      products.set(detailUrl ?? `unresolved:${cardIndex}`, {
+      const itemIndex = products.length;
+      products.push({
+        cardIndex,
         detailUrl,
         imageUrl: extractImageUrl(image),
         title,
@@ -184,16 +151,11 @@
       sourceUrl: location.href,
       pageTitle: document.title,
       capturedAt: new Date().toISOString(),
-      count: products.size,
-      items: [...products.values()],
+      count: products.length,
+      items: products,
       diagnostics: {
         rawCardCount: cards.length,
-        validDetailUrlCount,
-        uniqueValidDetailUrlCount: seenDetailUrls.size,
-        upgradedHttpDetailUrlCount,
-        outputCount: products.size,
-        skipped,
-        invalidDetailUrlSamples,
+        outputCount: products.length,
         unresolvedDetailCards,
       },
     };

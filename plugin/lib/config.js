@@ -33,18 +33,11 @@ export const LIMITS = Object.freeze({
   filterControlTimeoutMs: 3_000,
   dynamicDetailUrlTimeoutMs: 8_000,
   dynamicDetailClickDelayMs: 120,
-  maxDynamicDetailUrlCards: 10,
 });
 
-export const DETAIL_DOM_OPTIONS = Object.freeze({
-  defaultItemIndex: 1,
-  maxHtmlBytes: 5_000_000,
-  maxDepth: 12,
-  maxNodes: 2_000,
-  maxAttributes: 10,
-  maxTextLength: 200,
-  maxAttributeValueLength: 160,
-  downloadTimeoutMs: 30_000,
+export const DETAIL_FACT_OPTIONS = Object.freeze({
+  // Temporary test boundary. Remove this cap before production full-list capture.
+  testItemLimit: 10,
   maxFacts: 500,
   renderedPageTimeoutMs: 30_000,
   renderedPollDelayMs: 300,
@@ -128,8 +121,7 @@ export function normalizeStartRequest(message) {
   return {
     keyword,
     maxItems: Math.min(requestedMaxItems, LIMITS.maxItems),
-    includeDetailDom: message.includeDetailDom !== false,
-    includeDetailFacts: message.includeDetailFacts === true,
+    includeDetailFacts: true,
     procurementMinimumCny,
     procurementMaximumCny,
     sortMode,

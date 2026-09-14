@@ -7,6 +7,7 @@ using AutoMagic.Application.Ozon.Mapping;
 using AutoMagic.Application.Search;
 using AutoMagic.Contracts.Protocol;
 using AutoMagic.Domain.Pricing;
+using AutoMagic.Infrastructure.Collection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -22,10 +23,12 @@ public partial class MainViewModel : ObservableObject
     private readonly IOzonDictionaryService _ozonDictionaryService;
     private readonly IQwenSemanticMappingService _qwenMappingService;
     private readonly IQwenTestSettingsStore _qwenTestSettingsStore;
+    private readonly CollectionSnapshotStore _collectionSnapshotStore;
     private readonly Dispatcher _dispatcher;
     private bool _initialized;
     private OzonCategorySchema? _ozonSchema;
     private DetailFactSnapshotDto? _latestDetailSnapshot;
+    private IReadOnlyList<DetailCollectionResultDto> _latestDetailResults = [];
     private int _ozonSchemaRequestRevision;
     private CancellationTokenSource? _ozonSettingsSaveDebounce;
     private bool _isRestoringOzonSettings;
@@ -155,7 +158,8 @@ public partial class MainViewModel : ObservableObject
         IOzonTestSettingsStore ozonTestSettingsStore,
         IOzonDictionaryService ozonDictionaryService,
         IQwenSemanticMappingService qwenMappingService,
-        IQwenTestSettingsStore qwenTestSettingsStore)
+        IQwenTestSettingsStore qwenTestSettingsStore,
+        CollectionSnapshotStore collectionSnapshotStore)
     {
         _searchBridge = searchBridge;
         _exchangeRateService = exchangeRateService;
@@ -165,6 +169,7 @@ public partial class MainViewModel : ObservableObject
         _ozonDictionaryService = ozonDictionaryService;
         _qwenMappingService = qwenMappingService;
         _qwenTestSettingsStore = qwenTestSettingsStore;
+        _collectionSnapshotStore = collectionSnapshotStore;
         _dispatcher = Dispatcher.CurrentDispatcher;
         _statusText = GetConnectionText(searchBridge.IsExtensionConnected);
         _searchBridge.ConnectionChanged += OnConnectionChanged;
@@ -227,6 +232,7 @@ public partial class MainViewModel : ObservableObject
         ResultCount = 0;
         RawJson = "等待插件返回数据…";
         _latestDetailSnapshot = null;
+        _latestDetailResults = [];
         RefreshAttributeCoverage();
         ResetQwenMappingOutput("正在等待新的1688详情事实。");
 
@@ -246,20 +252,27 @@ public partial class MainViewModel : ObservableObject
             }
 
             ResultCount = result.Count;
+            var snapshotPath = await _collectionSnapshotStore.SaveAsync(result);
             RawJson = JsonSerializer.Serialize(result, BridgeJson.IndentedOptions);
-            _latestDetailSnapshot = result.DetailSnapshot;
+            _latestDetailResults = result.DetailResults ?? [];
+            _latestDetailSnapshot = result.DetailSnapshot ?? _latestDetailResults
+                .Where(item => string.Equals(item.Status, "success", StringComparison.OrdinalIgnoreCase))
+                .Select(item => new DetailFactSnapshotDto(
+                    item.FinalUrl ?? item.DetailUrl ?? string.Empty,
+                    item.CapturedAt ?? result.CapturedAt,
+                    item.PageTitle,
+                    item.Facts,
+                    item.Diagnostics,
+                    item.Raw))
+                .FirstOrDefault();
             RefreshAttributeCoverage();
             RefreshQwenReadinessStatus();
             RunQwenMappingCommand.NotifyCanExecuteChanged();
-            var factStatus = result.DetailSnapshot is null
-                ? "第2条详情事实未返回"
-                : $"第2条详情提取 {result.DetailSnapshot.Facts.Count} 项事实";
-            var unresolvedDetailUrlCount = GetUnresolvedDetailUrlCount(result.Diagnostics);
-            var detailUrlStatus = unresolvedDetailUrlCount > 0
-                ? $"{unresolvedDetailUrlCount} 条广告商品详情地址尚未解析；"
-                : string.Empty;
+            var successCount = _latestDetailResults.Count(item => item.Status == "success");
+            var partialCount = _latestDetailResults.Count(item => item.Status == "partial");
+            var failedCount = _latestDetailResults.Count(item => item.Status == "failed");
             StatusText =
-                $"采集完成：已收到 {result.Count} 条商品数据；{detailUrlStatus}{factStatus}。";
+                $"采集完成：列表 {result.Count} 条；详情已处理 {_latestDetailResults.Count} 条（成功 {successCount}、部分 {partialCount}、失败 {failedCount}）；已保存至 {snapshotPath}。";
         }
         catch (Exception error)
         {

@@ -7,6 +7,7 @@ using AutoMagic.Application.Ozon;
 using AutoMagic.Application.Ozon.Mapping;
 using AutoMagic.Desktop.ViewModels;
 using AutoMagic.Infrastructure.Bridge;
+using AutoMagic.Infrastructure.Collection;
 using AutoMagic.Infrastructure.ExchangeRates;
 using AutoMagic.Infrastructure.Ozon;
 using AutoMagic.Infrastructure.Ozon.Mapping;
@@ -32,6 +33,7 @@ public partial class App : System.Windows.Application
 
         var builder = Host.CreateApplicationBuilder(e.Args);
         builder.Services.AddSingleton<DesktopBridgeService>();
+        builder.Services.AddSingleton<CollectionSnapshotStore>();
         builder.Services.AddSingleton<ISearchBridge>(provider =>
             provider.GetRequiredService<DesktopBridgeService>());
         builder.Services.AddHostedService(provider =>

@@ -88,19 +88,10 @@ button:disabled {
   margin-top: 14px;
 }
 
-#detailDomSection {
-  margin-top: 14px;
-}
-
 .resultHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.headerActions {
-  display: flex;
-  gap: 6px;
 }
 
 .secondary {

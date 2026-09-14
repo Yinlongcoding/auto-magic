@@ -106,8 +106,9 @@ test('extracts link, image, pure-text title and price from the new card structur
 
   assert.equal(response.success, true);
   assert.equal(response.data.count, 1);
+  const { cardIndex: _cardIndex, ...firstItem } = response.data.items[0];
   assert.deepEqual(
-    { ...response.data.items[0] },
+    firstItem,
     {
       detailUrl: 'https://detail.1688.com/offer/123456.html',
       imageUrl: 'https://cbu01.alicdn.com/img/ibank/example.jpg',
@@ -116,27 +117,7 @@ test('extracts link, image, pure-text title and price from the new card structur
     },
   );
   assert.equal(response.data.items[0].title.includes('<font'), false);
-  assert.deepEqual(
-    JSON.parse(JSON.stringify(response.data.diagnostics)),
-    {
-      rawCardCount: 1,
-      validDetailUrlCount: 1,
-      uniqueValidDetailUrlCount: 1,
-      upgradedHttpDetailUrlCount: 0,
-      outputCount: 1,
-      skipped: {
-        missingDetailUrl: 0,
-        malformedDetailUrl: 0,
-        nonHttpsDetailUrl: 0,
-        non1688DetailUrl: 0,
-        nonOfferDetailUrl: 0,
-        duplicateDetailUrl: 0,
-        overLimit: 0,
-      },
-      invalidDetailUrlSamples: [],
-      unresolvedDetailCards: [],
-    },
-  );
+  assert.deepEqual(JSON.parse(JSON.stringify(response.data.diagnostics)), { rawCardCount: 1, outputCount: 1, unresolvedDetailCards: [] });
 });
 
 test('keeps all 60 cards when every product has a unique valid detail link', () => {
@@ -153,7 +134,6 @@ test('keeps all 60 cards when every product has a unique valid detail link', () 
 
   assert.equal(response.success, true);
   assert.equal(response.data.diagnostics.rawCardCount, 60);
-  assert.equal(response.data.diagnostics.uniqueValidDetailUrlCount, 60);
   assert.equal(response.data.diagnostics.outputCount, 60);
   assert.equal(response.data.count, 60);
   assert.equal(response.data.items.length, 60);
@@ -177,16 +157,12 @@ test('upgrades HTTP offer links and keeps non-offer 1688 cards for dynamic resol
   assert.equal(response.success, true);
   assert.equal(response.data.count, 60);
   assert.equal(response.data.diagnostics.rawCardCount, 60);
-  assert.equal(response.data.diagnostics.validDetailUrlCount, 49);
-  assert.equal(response.data.diagnostics.upgradedHttpDetailUrlCount, 49);
-  assert.equal(response.data.diagnostics.skipped.nonHttpsDetailUrl, 0);
-  assert.equal(response.data.diagnostics.skipped.nonOfferDetailUrl, 11);
   assert.equal(response.data.diagnostics.unresolvedDetailCards.length, 11);
   assert.equal(response.data.items[0].detailUrl.startsWith('https://'), true);
   assert.equal(response.data.items[59].detailUrl, null);
 });
 
-test('deduplicates links and rejects non-HTTPS product URLs', () => {
+test('preserves duplicate and unresolved list records', () => {
   const validCard = createCard({
     detailUrl: 'https://detail.1688.com/offer/123456.html',
     imageUrl: 'http://example.com/insecure.jpg',
@@ -212,17 +188,11 @@ test('deduplicates links and rejects non-HTTPS product URLs', () => {
   const response = runExtraction([validCard, duplicateCard, unsafeCard]);
 
   assert.equal(response.success, true);
-  assert.equal(response.data.count, 1);
+  assert.equal(response.data.count, 3);
   assert.equal(response.data.items[0].imageUrl, null);
   assert.equal(response.data.diagnostics.rawCardCount, 3);
-  assert.equal(response.data.diagnostics.validDetailUrlCount, 2);
-  assert.equal(response.data.diagnostics.uniqueValidDetailUrlCount, 1);
-  assert.equal(response.data.diagnostics.skipped.duplicateDetailUrl, 1);
-  assert.equal(response.data.diagnostics.skipped.nonHttpsDetailUrl, 1);
-  assert.deepEqual(
-    JSON.parse(JSON.stringify(response.data.diagnostics.invalidDetailUrlSamples)),
-    [{ reason: 'nonHttpsDetailUrl', href: 'javascript:alert(1)' }],
-  );
+  assert.equal(response.data.items[1].detailUrl, 'https://detail.1688.com/offer/123456.html');
+  assert.equal(response.data.items[2].detailUrl, null);
 });
 
 test('reports cards rejected for missing, malformed and non-1688 links', () => {
@@ -247,11 +217,9 @@ test('reports cards rejected for missing, malformed and non-1688 links', () => {
 
   const response = runExtraction([missingCard, malformedCard, externalCard]);
 
-  assert.equal(response.data.count, 0);
+  assert.equal(response.data.count, 3);
   assert.equal(response.data.diagnostics.rawCardCount, 3);
-  assert.equal(response.data.diagnostics.skipped.missingDetailUrl, 1);
-  assert.equal(response.data.diagnostics.skipped.malformedDetailUrl, 1);
-  assert.equal(response.data.diagnostics.skipped.non1688DetailUrl, 1);
+  assert.equal(response.data.items.length, 3);
 });
 
 test('does not mislabel a 1688 shop homepage as a product detail URL', () => {
@@ -264,7 +232,5 @@ test('does not mislabel a 1688 shop homepage as a product detail URL', () => {
 
   assert.equal(response.data.count, 1);
   assert.equal(response.data.items[0].detailUrl, null);
-  assert.equal(response.data.diagnostics.validDetailUrlCount, 0);
-  assert.equal(response.data.diagnostics.skipped.nonOfferDetailUrl, 1);
   assert.equal(response.data.diagnostics.unresolvedDetailCards[0].cardIndex, 0);
 });

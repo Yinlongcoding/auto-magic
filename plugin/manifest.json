@@ -1,14 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Auto Magic 1688 DOM Demo",
-  "version": "0.1.10",
-  "description": "验证在用户当前 Chrome 中搜索1688并读取商品DOM。",
+  "name": "Auto Magic 1688 Collector",
+  "version": "0.1.11",
+  "description": "在用户当前 Chrome 中搜索1688并采集商品详情事实。",
   "permissions": [
     "alarms",
     "debugger",
-    "downloads",
     "nativeMessaging",
-    "offscreen",
     "scripting",
     "storage",
     "tabs"
@@ -22,7 +20,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Auto Magic 1688 DOM Demo",
+    "default_title": "Auto Magic 1688 Collector",
     "default_popup": "popup.html"
   }
 }

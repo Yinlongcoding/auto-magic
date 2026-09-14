@@ -60,27 +60,10 @@ test('keeps the active price form as a hint and uses a semantic confirm selector
   );
 });
 
-test('defaults detail DOM capture to the second list item with bounded output', () => {
-  assert.equal(config.DETAIL_DOM_OPTIONS.defaultItemIndex, 1);
-  assert.equal(config.DETAIL_DOM_OPTIONS.maxHtmlBytes, 5_000_000);
-  assert.equal(config.DETAIL_DOM_OPTIONS.maxNodes, 2_000);
-  assert.equal(config.DETAIL_DOM_OPTIONS.maxDepth, 12);
-  assert.equal(config.DETAIL_DOM_OPTIONS.renderedPageTimeoutMs, 30_000);
-  assert.equal(config.DETAIL_DOM_OPTIONS.maxFacts, 500);
-  assert.equal(config.DETAIL_DOM_OPTIONS.maxImages, 100);
-});
-
-test('keeps detail DOM for popup searches and allows desktop searches to skip it', () => {
-  const popupRequest = config.normalizeStartRequest({
+test('always enables full detail fact collection', () => {
+  const request = config.normalizeStartRequest({
     type: 'START_1688_DOM_DEMO',
     keyword: '连衣裙',
   });
-  const desktopRequest = config.normalizeStartRequest({
-    type: 'START_1688_DOM_DEMO',
-    keyword: '连衣裙',
-    includeDetailDom: false,
-  });
-
-  assert.equal(popupRequest.includeDetailDom, true);
-  assert.equal(desktopRequest.includeDetailDom, false);
+  assert.equal(request.includeDetailFacts, true);
 });

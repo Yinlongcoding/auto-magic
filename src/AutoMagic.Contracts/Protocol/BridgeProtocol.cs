@@ -84,10 +84,26 @@ public sealed record DetailFactSnapshotDto(
     JsonElement? Diagnostics,
     JsonElement? Raw = null);
 
+public sealed record DetailCollectionResultDto(
+    int ItemIndex,
+    int ItemPosition,
+    string? ProductTitle,
+    string? DetailUrl,
+    string Status,
+    string? FinalUrl,
+    string? CapturedAt,
+    string? PageTitle,
+    IReadOnlyList<DetailFactDto> Facts,
+    IReadOnlyList<string>? Warnings,
+    IReadOnlyList<string>? Errors,
+    JsonElement? Diagnostics = null,
+    JsonElement? Raw = null);
+
 public sealed record SearchResultPayload(
     string Keyword,
     string CapturedAt,
     int Count,
     IReadOnlyList<ProductItemDto> Items,
     JsonElement? Diagnostics,
-    DetailFactSnapshotDto? DetailSnapshot = null);
+    DetailFactSnapshotDto? DetailSnapshot = null,
+    IReadOnlyList<DetailCollectionResultDto>? DetailResults = null);
