@@ -1304,37 +1304,89 @@ async function captureAllRenderedDetails(job, items) {
   const results = [];
   const allItems = Array.isArray(items) ? items : [];
   const queue = allItems.slice(0, DETAIL_FACT_OPTIONS.testItemLimit);
-  for (let index = 0; index < queue.length; index += 1) {
-    const item = queue[index] || {};
-    await updateState({ status: 'running', jobId: job.jobId, step: '正在采集第' + (index + 1) + '/' + queue.length + '条商品详情' });
-    results.push(await captureRenderedDetail(job, item, index));
+  const cache = await readDetailCache();
+  let detailTabId = null;
+  try {
+    for (let index = 0; index < queue.length; index += 1) {
+      const item = queue[index] || {};
+      const cached = item.detailUrl ? cache[item.detailUrl] : null;
+      await updateState({ status: 'running', jobId: job.jobId, step: '正在采集第' + (index + 1) + '/' + queue.length + '条商品详情' });
+      if (cached?.status === 'success') {
+        results.push({ ...cached, itemIndex: index, itemPosition: index + 1, productTitle: item.title ?? cached.productTitle, detailUrl: item.detailUrl });
+      } else {
+        const captured = await captureRenderedDetail(job, item, index, detailTabId);
+        detailTabId = captured.tabId;
+        results.push(captured.result);
+        if (captured.result.status === 'success' && item.detailUrl) {
+          cache[item.detailUrl] = captured.result;
+          await writeDetailCache(cache);
+        }
+      }
+      if ((index + 1) % DETAIL_FACT_OPTIONS.batchSize === 0 && index + 1 < queue.length) {
+        await delay(DETAIL_FACT_OPTIONS.batchPauseMs);
+      } else if (index + 1 < queue.length) {
+        await delay(DETAIL_FACT_OPTIONS.betweenItemDelayMs);
+      }
+    }
+
+    const retryIndexes = results
+      .map((result, index) => result.status === 'failed' ? index : -1)
+      .filter((index) => index >= 0);
+    if (retryIndexes.length) {
+      await updateState({ status: 'running', jobId: job.jobId, step: `首轮详情完成，${DETAIL_FACT_OPTIONS.retryPauseMs / 1000}秒后重试 ${retryIndexes.length} 条失败详情` });
+      await delay(DETAIL_FACT_OPTIONS.retryPauseMs);
+      for (const index of retryIndexes) {
+        const captured = await captureRenderedDetail(job, queue[index] || {}, index, detailTabId);
+        detailTabId = captured.tabId;
+        results[index] = captured.result;
+        if (captured.result.status === 'success' && queue[index]?.detailUrl) {
+          cache[queue[index].detailUrl] = captured.result;
+          await writeDetailCache(cache);
+        }
+        await delay(DETAIL_FACT_OPTIONS.betweenItemDelayMs);
+      }
+    }
+    return results;
+  } finally {
+    if (Number.isInteger(detailTabId)) {
+      job.temporaryTabIds?.delete(detailTabId);
+      try { await chrome.tabs.remove(detailTabId); } catch { /* 详情标签页可能已关闭。 */ }
+    }
   }
-  return results;
 }
 
-async function captureRenderedDetail(job, item, itemIndex) {
+async function captureRenderedDetail(job, item, itemIndex, existingTabId = null) {
   const base = { itemIndex, itemPosition: itemIndex + 1, productTitle: item?.title ?? null, detailUrl: item?.detailUrl ?? null };
-  if (!item?.detailUrl) return { ...base, status: 'failed', error: '列表记录没有详情链接。', facts: [] };
-  let tabId;
+  if (!item?.detailUrl) return { tabId: existingTabId, result: { ...base, status: 'failed', errors: ['列表记录没有详情链接。'], facts: [] } };
+  let tabId = existingTabId;
   try {
-    const detailTab = await chrome.tabs.create({ url: item.detailUrl, active: false });
-    assertTabId(detailTab.id);
-    tabId = detailTab.id;
-    job.temporaryTabIds ??= new Set();
-    job.temporaryTabIds.add(tabId);
+    if (!Number.isInteger(tabId)) {
+      const detailTab = await chrome.tabs.create({ url: 'about:blank', active: false });
+      assertTabId(detailTab.id);
+      tabId = detailTab.id;
+      job.temporaryTabIds ??= new Set();
+      job.temporaryTabIds.add(tabId);
+      await chrome.tabs.update(tabId, { url: item.detailUrl, active: false });
+    } else {
+      await chrome.tabs.update(tabId, { url: item.detailUrl, active: false });
+    }
     await waitForTabComplete(tabId, DETAIL_FACT_OPTIONS.renderedPageTimeoutMs);
     await chrome.scripting.executeScript({ target: { tabId }, files: ['content/detail-extractor.js'] });
     const extraction = await waitForRenderedDetailExtraction(tabId, DETAIL_FACT_OPTIONS.renderedPageTimeoutMs);
     const facts = extraction.facts ?? [];
-    return { ...base, status: facts.length ? 'success' : 'partial', finalUrl: extraction.finalUrl, capturedAt: extraction.capturedAt, pageTitle: extraction.pageTitle, facts, diagnostics: extraction.diagnostics ?? null, raw: extraction.raw ?? null, warnings: facts.length ? [] : ['未采集到详情事实。'], errors: [] };
+    return { tabId, result: { ...base, status: facts.length ? 'success' : 'partial', finalUrl: extraction.finalUrl, capturedAt: extraction.capturedAt, pageTitle: extraction.pageTitle, facts, diagnostics: extraction.diagnostics ?? null, raw: extraction.raw ?? null, warnings: facts.length ? [] : ['未采集到详情事实。'], errors: [] } };
   } catch (error) {
-    return { ...base, status: 'failed', facts: [], warnings: [], errors: [error.message] };
-  } finally {
-    if (Number.isInteger(tabId)) {
-      job.temporaryTabIds?.delete(tabId);
-      try { await chrome.tabs.remove(tabId); } catch { /* 标签页可能已被关闭。 */ }
-    }
+    return { tabId, result: { ...base, status: 'failed', facts: [], warnings: [], errors: [error.message] } };
   }
+}
+
+async function readDetailCache() {
+  const stored = await chrome.storage.local.get(['detailCache']);
+  return stored.detailCache && typeof stored.detailCache === 'object' ? stored.detailCache : {};
+}
+
+async function writeDetailCache(cache) {
+  await chrome.storage.local.set({ detailCache: cache });
 }
 
 async function waitForRenderedDetailExtraction(tabId, timeoutMs) {

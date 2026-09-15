@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Auto Magic 1688 Collector",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "在用户当前 Chrome 中搜索1688并采集商品详情事实。",
   "permissions": [
     "alarms",

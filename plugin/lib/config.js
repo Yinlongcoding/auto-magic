@@ -44,6 +44,10 @@ export const DETAIL_FACT_OPTIONS = Object.freeze({
   maxImages: 100,
   maxPriceTexts: 30,
   maxSkuTexts: 100,
+  betweenItemDelayMs: 1_000,
+  batchSize: 10,
+  batchPauseMs: 5_000,
+  retryPauseMs: 5_000,
 });
 
 export function isAllowed1688Url(value) {
