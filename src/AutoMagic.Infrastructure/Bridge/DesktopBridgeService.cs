@@ -10,8 +10,8 @@ namespace AutoMagic.Infrastructure.Bridge;
 
 public sealed class DesktopBridgeService : BackgroundService, ISearchBridge
 {
-    private static readonly TimeSpan SearchTimeout = TimeSpan.FromMinutes(3);
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<SearchResultPayload>> _pending = new();
+    private static readonly TimeSpan SearchInactivityTimeout = TimeSpan.FromMinutes(2);
+    private readonly ConcurrentDictionary<string, PendingSearch> _pending = new();
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private NamedPipeServerStream? _connection;
     private int _connectionState;
@@ -36,6 +36,8 @@ public sealed class DesktopBridgeService : BackgroundService, ISearchBridge
     public bool IsExtensionConnected => Volatile.Read(ref _connectionState) == 1;
 
     public event EventHandler<bool>? ConnectionChanged;
+
+    public event EventHandler<SearchProgressPayload>? SearchProgressChanged;
 
     public async Task<SearchResultPayload> SearchAsync(
         string keyword,
@@ -75,9 +77,8 @@ public sealed class DesktopBridgeService : BackgroundService, ISearchBridge
         }
 
         var requestId = Guid.NewGuid().ToString("N");
-        var completion = new TaskCompletionSource<SearchResultPayload>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!_pending.TryAdd(requestId, completion))
+        var pending = new PendingSearch();
+        if (!_pending.TryAdd(requestId, pending))
         {
             throw new InvalidOperationException("无法创建搜索请求。");
         }
@@ -95,7 +96,7 @@ public sealed class DesktopBridgeService : BackgroundService, ISearchBridge
                     sortMode,
                     includeDetailFacts));
             await SendAsync(envelope, cancellationToken);
-            return await completion.Task.WaitAsync(SearchTimeout, cancellationToken);
+            return await WaitForProgressAwareCompletionAsync(pending, cancellationToken);
         }
         catch (TimeoutException)
         {
@@ -169,7 +170,23 @@ public sealed class DesktopBridgeService : BackgroundService, ISearchBridge
                 break;
 
             case BridgeProtocol.MessageTypes.SearchAccepted:
+                TouchPending(envelope.RequestId);
                 _logger.LogInformation("Chrome 已接受搜索请求。RequestId={RequestId}", envelope.RequestId);
+                break;
+
+            case BridgeProtocol.MessageTypes.SearchProgress:
+                TouchPending(envelope.RequestId);
+                var progress = Deserialize<SearchProgressPayload>(envelope);
+                _logger.LogInformation(
+                    "Chrome 采集进度。RequestId={RequestId}, Stage={Stage}, Completed={Completed}, Total={Total}",
+                    envelope.RequestId,
+                    progress?.Stage ?? "unknown",
+                    progress?.CompletedItems ?? 0,
+                    progress?.TotalItems ?? 0);
+                if (progress is not null)
+                {
+                    SearchProgressChanged?.Invoke(this, progress);
+                }
                 break;
 
             case BridgeProtocol.MessageTypes.SearchCompleted:
@@ -180,7 +197,7 @@ public sealed class DesktopBridgeService : BackgroundService, ISearchBridge
                 }
                 else if (_pending.TryGetValue(envelope.RequestId, out var completion))
                 {
-                    completion.TrySetResult(result);
+                    completion.Completion.TrySetResult(result);
                 }
                 break;
 
@@ -221,7 +238,7 @@ public sealed class DesktopBridgeService : BackgroundService, ISearchBridge
     {
         if (_pending.TryGetValue(requestId, out var completion))
         {
-            completion.TrySetException(new InvalidOperationException(message));
+            completion.Completion.TrySetException(new InvalidOperationException(message));
         }
     }
 
@@ -229,8 +246,49 @@ public sealed class DesktopBridgeService : BackgroundService, ISearchBridge
     {
         foreach (var completion in _pending.Values)
         {
-            completion.TrySetException(new IOException(message));
+            completion.Completion.TrySetException(new IOException(message));
         }
+    }
+
+    private async Task<SearchResultPayload> WaitForProgressAwareCompletionAsync(
+        PendingSearch pending,
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            var delay = Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+            var completed = await Task.WhenAny(pending.Completion.Task, delay);
+            if (completed == pending.Completion.Task)
+            {
+                return await pending.Completion.Task;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (DateTimeOffset.UtcNow - pending.LastActivity >= SearchInactivityTimeout)
+            {
+                throw new TimeoutException();
+            }
+        }
+    }
+
+    private void TouchPending(string requestId)
+    {
+        if (_pending.TryGetValue(requestId, out var pending))
+        {
+            pending.Touch();
+        }
+    }
+
+    private sealed class PendingSearch
+    {
+        private long _lastActivityTicks = DateTimeOffset.UtcNow.UtcTicks;
+
+        public TaskCompletionSource<SearchResultPayload> Completion { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public DateTimeOffset LastActivity => new(Interlocked.Read(ref _lastActivityTicks), TimeSpan.Zero);
+
+        public void Touch() => Interlocked.Exchange(ref _lastActivityTicks, DateTimeOffset.UtcNow.UtcTicks);
     }
 
     private void SetConnected(bool value)

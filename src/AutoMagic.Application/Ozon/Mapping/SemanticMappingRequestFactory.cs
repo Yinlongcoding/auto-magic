@@ -68,6 +68,78 @@ public static partial class SemanticMappingRequestFactory
         return request;
     }
 
+    public static SemanticMappingRequest CreateFromFieldMatchingInput(
+        string requestId,
+        FieldMatchingInput input,
+        IReadOnlyDictionary<long, IReadOnlyList<SemanticDictionaryCandidate>>? dictionaryCandidates = null,
+        IReadOnlySet<long>? attributeIds = null)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (input.Target.DescriptionCategoryId is not > 0 || input.Target.TypeId is not > 0)
+        {
+            throw new ArgumentException("字段匹配输入尚未确定Ozon类目和类型。", nameof(input));
+        }
+
+        var sourceFacts = input.Source.Facts
+            .Where(fact =>
+                !string.IsNullOrWhiteSpace(fact.FactId) &&
+                !string.IsNullOrWhiteSpace(fact.Label) &&
+                !string.IsNullOrWhiteSpace(fact.Value) &&
+                !string.IsNullOrWhiteSpace(fact.Source))
+            .Select(fact => new SemanticSourceFact(
+                fact.FactId,
+                fact.Label,
+                fact.Value,
+                fact.Source))
+            .ToArray();
+        var targetAttributes = input.Target.Attributes
+            .Where(attribute => attribute.IsRequired)
+            .Where(attribute => attributeIds is null || attributeIds.Contains(attribute.AttributeId))
+            .Select(attribute => new SemanticTargetAttribute(
+                attribute.AttributeId,
+                attribute.AttributeComplexId,
+                attribute.Name,
+                attribute.Description,
+                attribute.Type,
+                attribute.IsCollection,
+                attribute.IsRequired,
+                attribute.MaxValueCount,
+                attribute.DictionaryId,
+                GetDictionaryCandidates(attribute.AttributeId, dictionaryCandidates)))
+            .ToArray();
+
+        var capturedAt = DateTimeOffset.TryParse(input.ProductRef.CapturedAt, out var parsedCapturedAt)
+            ? parsedCapturedAt.ToString("O")
+            : DateTimeOffset.UtcNow.ToString("O");
+        var request = new SemanticMappingRequest(
+            requestId.Trim(),
+            SemanticMappingPurposes.EvaluateCandidates,
+            new SemanticMappingContext(
+                input.Source.Platform,
+                input.Target.Platform,
+                input.Target.DescriptionCategoryId.Value,
+                input.Target.TypeId.Value,
+                input.Target.CategoryPath ?? string.Empty,
+                input.Target.CategoryAndTypeConfirmedByUser,
+                input.ProductRef.OfferId,
+                input.ProductRef.DetailUrl,
+                capturedAt,
+                sourceFacts.Length,
+                targetAttributes.Any(attribute => attribute.DictionaryCandidates.Count > 0)),
+            targetAttributes,
+            sourceFacts,
+            SemanticMappingOutputContract.Default);
+
+        var validation = SemanticMappingResponseValidator.ValidateRequest(request);
+        if (validation.Count > 0)
+        {
+            throw new ArgumentException(
+                $"语义映射请求无效：{string.Join("；", validation.Select(issue => issue.Message))}");
+        }
+
+        return request;
+    }
+
     private static IReadOnlyList<SemanticSourceFact> BuildSourceFacts(DetailFactSnapshotDto snapshot)
     {
         var facts = new List<(string Label, string Value, string Source)>();

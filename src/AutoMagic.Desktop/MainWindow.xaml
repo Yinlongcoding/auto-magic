@@ -100,8 +100,27 @@
             </DockPanel>
         </Border>
 
-        <Border Grid.Row="3" Padding="18" Margin="0,0,0,14" Background="White" CornerRadius="10">
-            <Grid>
+        <Expander Grid.Row="3"
+                  IsExpanded="True"
+                  Margin="0,0,0,14"
+                  HorizontalContentAlignment="Stretch">
+            <Expander.Header>
+                <Border Padding="14,10" Background="#E8EEF8" CornerRadius="8">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right"
+                                   Text="点击折叠，释放下方数据区域"
+                                   Foreground="#6B7280"
+                                   FontSize="12"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="汇率参考、成本核算与售价区间"
+                                   FontWeight="SemiBold"
+                                   Foreground="#1F2937"
+                                   FontSize="14" />
+                    </DockPanel>
+                </Border>
+            </Expander.Header>
+            <Border Padding="18" Margin="0,8,0,0" Background="White" CornerRadius="10">
+                <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="0.9*" />
                     <ColumnDefinition Width="1.25*" />
@@ -242,8 +261,9 @@
                                  Text="{Binding SalePriceMaximumCny, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True, TargetNullValue=''}" />
                     </Grid>
                 </StackPanel>
-            </Grid>
-        </Border>
+                </Grid>
+            </Border>
+        </Expander>
 
         <TabControl Grid.Row="4" FontFamily="Microsoft YaHei UI" FontSize="14">
             <TabItem Header="商品列表">
@@ -275,7 +295,140 @@
                          VerticalScrollBarVisibility="Auto"
                          HorizontalScrollBarVisibility="Auto" />
             </TabItem>
-            <TabItem Header="Ozon 动态参数">
+            <TabItem Header="字段匹配">
+                <Grid Margin="14">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Padding="16" Background="#F8FAFC" CornerRadius="8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="详情商品"
+                                       Margin="0,0,12,0"
+                                       VerticalAlignment="Center"
+                                       FontWeight="SemiBold" />
+                            <ComboBox Grid.Column="1"
+                                      MinWidth="520"
+                                      Padding="8,6"
+                                      Margin="0,0,12,0"
+                                      ItemsSource="{Binding FieldMatchingProducts}"
+                                      SelectedItem="{Binding SelectedFieldMatchingDetail, Mode=TwoWay}"
+                                      DisplayMemberPath="ProductTitle"
+                                      ToolTip="选择本轮采集的一个详情商品，查看其源证据和目标字段" />
+                            <Button Grid.Column="2"
+                                    Content="运行通用匹配引擎"
+                                    Padding="16,7"
+                                    Command="{Binding RunQwenMappingCommand}"
+                                    ToolTip="依次执行确定性匹配、Ozon字典查询、转换规则和必要的Qwen语义裁决" />
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Row="1" Padding="14,10" Margin="0,10"
+                            Background="#E8EEF8" CornerRadius="8">
+                        <StackPanel>
+                            <TextBlock Text="{Binding FieldMatchingStatus}"
+                                       Foreground="#374151"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding FieldMatchingFinalStatus}"
+                                       Margin="0,5,0,0"
+                                       FontWeight="SemiBold"
+                                       Foreground="#1D4ED8"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding ConversionRuleStatus}"
+                                       Margin="0,5,0,0"
+                                       Foreground="#4B5563"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <TabControl Grid.Row="2" SelectedIndex="0">
+                        <TabItem Header="最终匹配结果">
+                            <DataGrid ItemsSource="{Binding FieldMatchingFinalMappings}"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      CanUserAddRows="False"
+                                      RowHeaderWidth="0"
+                                      AlternatingRowBackground="#F8FAFC">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Ozon 属性" Binding="{Binding AttributeName}" Width="1.1*" />
+                                    <DataGridCheckBoxColumn Header="必填" Binding="{Binding IsRequired}" Width="0.4*" />
+                                    <DataGridTextColumn Header="最终状态" Binding="{Binding Status}" Width="0.85*" />
+                                    <DataGridTextColumn Header="最终文本" Binding="{Binding FinalTextDisplay}" Width="1.2*" />
+                                    <DataGridTextColumn Header="valueId" Binding="{Binding FinalDictionaryValueIdDisplay}" Width="0.8*" />
+                                    <DataGridTextColumn Header="决策来源" Binding="{Binding DecisionSource}" Width="0.75*" />
+                                    <DataGridCheckBoxColumn Header="需复核" Binding="{Binding RequiresHumanReview}" Width="0.5*" />
+                                    <DataGridTextColumn Header="判断原因" Binding="{Binding Reason}" Width="2.2*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                        <TabItem Header="引擎处理状态">
+                            <DataGrid ItemsSource="{Binding FieldMatchingEngineAttributes}"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      CanUserAddRows="False"
+                                      RowHeaderWidth="0"
+                                      AlternatingRowBackground="#F8FAFC">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Ozon 属性" Binding="{Binding AttributeName}" Width="1.2*" />
+                                    <DataGridCheckBoxColumn Header="必填" Binding="{Binding IsRequired}" Width="0.45*" />
+                                    <DataGridTextColumn Header="处理状态" Binding="{Binding Status}" Width="1.0*" />
+                                    <DataGridTextColumn Header="匹配方式" Binding="{Binding MappingMethod}" Width="0.9*" />
+                                    <DataGridTextColumn Header="置信度" Binding="{Binding Confidence, StringFormat={}{0:P0}}" Width="0.6*" />
+                                    <DataGridTextColumn Header="处理原因" Binding="{Binding Reason}" Width="2.8*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                        <TabItem Header="源商品事实">
+                            <DataGrid ItemsSource="{Binding FieldMatchingFacts}"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      CanUserAddRows="False"
+                                      RowHeaderWidth="0"
+                                      AlternatingRowBackground="#F8FAFC">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="事实 ID" Binding="{Binding FactId}" Width="0.55*" />
+                                    <DataGridTextColumn Header="1688 字段" Binding="{Binding Label}" Width="1.15*" />
+                                    <DataGridTextColumn Header="原始值" Binding="{Binding Value}" Width="2.6*" />
+                                    <DataGridTextColumn Header="证据来源" Binding="{Binding Source}" Width="1.1*" />
+                                    <DataGridTextColumn Header="JSON 路径" Binding="{Binding SourcePath}" Width="1.2*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                        <TabItem Header="引擎输入 JSON">
+                            <TextBox Text="{Binding FieldMatchingInputJson}"
+                                     IsReadOnly="True"
+                                     AcceptsReturn="True"
+                                     AcceptsTab="True"
+                                     TextWrapping="NoWrap"
+                                     FontFamily="Consolas"
+                                     FontSize="12"
+                                     Padding="10"
+                                     VerticalScrollBarVisibility="Auto"
+                                     HorizontalScrollBarVisibility="Auto" />
+                        </TabItem>
+                        <TabItem Header="引擎输出 JSON">
+                            <TextBox Text="{Binding FieldMatchingFinalOutputJson}"
+                                     IsReadOnly="True"
+                                     AcceptsReturn="True"
+                                     TextWrapping="NoWrap"
+                                     FontFamily="Consolas"
+                                     FontSize="12"
+                                     Padding="10"
+                                     VerticalScrollBarVisibility="Auto"
+                                     HorizontalScrollBarVisibility="Auto" />
+                        </TabItem>
+                    </TabControl>
+                </Grid>
+            </TabItem>
+            <TabItem Header="引擎设置">
                 <Grid Margin="14">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -285,7 +438,7 @@
 
                     <Border Grid.Row="0" Padding="16" Background="#F8FAFC" CornerRadius="8">
                         <StackPanel>
-                            <TextBlock Text="临时 Ozon 凭证与已选品类"
+                            <TextBlock Text="通用匹配引擎设置"
                                        Style="{StaticResource SectionTitleStyle}" />
                             <TextBlock Text="测试期自动保存：API Key 存入当前 Windows 用户的 Credential Manager；Client ID 和已选品类/类型存入本地用户设置。不会传给 Native Host 或 Chrome 插件。"
                                        Margin="0,0,0,12"
@@ -297,6 +450,7 @@
                                        TextWrapping="Wrap" />
                             <Grid>
                                 <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
@@ -353,15 +507,42 @@
                                         Content="验证并读取"
                                         Padding="14,7"
                                         Command="{Binding LoadOzonSchemaCommand}" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0"
+                                           Text="Qwen API Key"
+                                           Margin="0,10,8,0"
+                                           VerticalAlignment="Center" />
+                                <PasswordBox x:Name="QwenApiKeyPasswordBox"
+                                             Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3"
+                                             Margin="0,10,18,0"
+                                             Padding="8,6"
+                                             PasswordChanged="OnQwenApiKeyPasswordChanged" />
+                                <Button Grid.Row="2" Grid.Column="4"
+                                        Content="清除凭证"
+                                        Margin="0,10,0,0"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="OnClearQwenCredentials" />
                             </Grid>
+                            <TextBlock Margin="0,10,0,0"
+                                       Text="引擎先执行确定性匹配与Ozon字典查询，仅把仍不明确的字段交给Qwen。"
+                                       Foreground="#6B7280"
+                                       TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
 
-                    <TextBlock Grid.Row="1"
-                               Margin="2,10"
-                               Text="{Binding OzonSchemaStatus}"
-                               Foreground="#374151"
-                               TextWrapping="Wrap" />
+                    <StackPanel Grid.Row="1" Margin="2,10">
+                        <TextBlock Text="{Binding OzonSchemaStatus}"
+                                   Foreground="#374151"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding QwenMappingStatus}"
+                                   Margin="0,5,0,0"
+                                   Foreground="#374151"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding QwenDictionaryStatus}"
+                                   Margin="0,5,0,0"
+                                   Foreground="#4B5563"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
 
                     <TabControl Grid.Row="2">
                         <TabItem Header="属性列表">
@@ -396,7 +577,7 @@
                     </TabControl>
                 </Grid>
             </TabItem>
-            <TabItem Header="属性覆盖报告">
+            <TabItem Header="属性覆盖报告" Visibility="Collapsed">
                 <Grid Margin="14">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -441,7 +622,7 @@
                     </TabControl>
                 </Grid>
             </TabItem>
-            <TabItem Header="AI 语义映射">
+            <TabItem Header="AI 语义映射" Visibility="Collapsed">
                 <Grid Margin="14">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -478,8 +659,7 @@
                                        Text="DashScope API Key"
                                        Margin="0,0,10,8"
                                        VerticalAlignment="Center" />
-                            <PasswordBox x:Name="QwenApiKeyPasswordBox"
-                                         Grid.Row="1" Grid.Column="1"
+                            <PasswordBox Grid.Row="1" Grid.Column="1"
                                          Margin="0,0,12,8"
                                          Padding="8,6"
                                          PasswordChanged="OnQwenApiKeyPasswordChanged" />
@@ -491,17 +671,17 @@
                             <StackPanel Grid.Row="1" Grid.Column="3"
                                         Orientation="Horizontal"
                                         Margin="0,0,0,8">
-                                <Button Content="执行 AI 映射"
+                                <Button Content="运行通用匹配引擎"
                                         Margin="0,0,8,0"
                                         Padding="16,7"
                                         Command="{Binding RunQwenMappingCommand}" />
-                                <Button Content="读取字典并复核"
+                                <Button Content="补充字典并复核"
                                         Padding="16,7"
                                         Command="{Binding ResolveQwenDictionariesCommand}" />
                             </StackPanel>
 
                             <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4"
-                                       Text="API Key仅保存在当前Windows用户的Credential Manager。只有点击“执行AI映射”才会调用百炼并产生Token费用；未通过本地校验的响应不会写入映射库。"
+                                       Text="引擎先执行确定性匹配并查询Ozon合法valueId，只有仍不明确的字段才会调用Qwen并产生Token费用；Qwen不能生成候选范围之外的valueId。"
                                        Foreground="#92400E"
                                        TextWrapping="Wrap" />
                         </Grid>

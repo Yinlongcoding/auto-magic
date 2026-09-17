@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using AutoMagic.Contracts.Protocol;
 
 namespace AutoMagic.Application.Ozon;
@@ -12,13 +13,23 @@ public static class AttributeCoverageResolver
     private static readonly HashSet<string> GenderAliases =
         Aliases("gender", "适用性别", "性别", "пол");
 
+    private static readonly HashSet<string> SizeAliases =
+        Aliases("size", "尺寸", "尺码", "размер");
+
+    private static readonly HashSet<string> OriginAliases =
+        Aliases("countryoforigin", "origin", "产地", "原产地", "原产国", "странапроисхождения");
+
+    private static readonly HashSet<string> BrandAliases =
+        Aliases("brand", "品牌", "品牌名称", "服装和鞋类品牌", "бренд", "торговаямарка");
+
     private static readonly IReadOnlyList<HashSet<string>> AliasGroups =
     [
-        Aliases("material", "材质", "面料", "面料名称", "主面料成分", "материал"),
-        Aliases("brand", "品牌", "品牌名称", "服装和鞋类品牌", "бренд", "торговаямарка"),
+        Aliases("name", "名称", "商品名称", "商品标题", "标题", "产品名称", "产品标题"),
+        Aliases("material", "材料", "材质", "面料", "面料名称", "主面料成分", "материал"),
+        BrandAliases,
         Aliases("color", "colour", "颜色", "商品颜色", "色彩", "цвет", "цветтовара"),
-        Aliases("size", "尺寸", "尺码", "размер"),
-        Aliases("countryoforigin", "origin", "产地", "原产地", "странапроисхождения"),
+        SizeAliases,
+        OriginAliases,
         GenderAliases,
         Aliases("season", "季节", "适用季节", "сезон"),
         Aliases("shelflife", "保质期", "срокгодности"),
@@ -62,6 +73,12 @@ public static class AttributeCoverageResolver
 
         var resolutions = schema.Attributes.Select(attribute =>
         {
+            var policyResolution = ResolvePolicyAttribute(attribute, snapshot, usableFacts);
+            if (policyResolution is not null)
+            {
+                return policyResolution;
+            }
+
             var match = FindBestMatch(attribute.Name, usableFacts);
             if (match is null || match.Score < MinimumReviewScore)
             {
@@ -73,6 +90,15 @@ public static class AttributeCoverageResolver
             }
 
             if (match.Score < MinimumAutomaticScore)
+            {
+                return Resolution(
+                    attribute,
+                    AttributeResolutionStatuses.ReviewRequired,
+                    match,
+                    match.Score);
+            }
+
+            if (IsUnknownBrand(attribute.Name, match.Fact.Value))
             {
                 return Resolution(
                     attribute,
@@ -93,6 +119,135 @@ public static class AttributeCoverageResolver
             snapshot.DetailUrl,
             DateTimeOffset.UtcNow,
             resolutions);
+    }
+
+    private static AttributeResolution? ResolvePolicyAttribute(
+        OzonAttributeDefinition attribute,
+        DetailFactSnapshotDto snapshot,
+        IReadOnlyList<IndexedFact> facts)
+    {
+        var target = Normalize(attribute.Name);
+        if (attribute.Id == 8292 || target is "合并至一张卡片" or "合成至一张卡片")
+        {
+            var offerId = ExtractOfferId(snapshot.DetailUrl);
+            return string.IsNullOrWhiteSpace(offerId)
+                ? PolicyResolution(attribute, AttributeResolutionStatuses.PolicyRequired, null, 0m, "policy:ozon-card-group")
+                : PolicyResolution(
+                    attribute,
+                    AttributeResolutionStatuses.Resolved,
+                    $"AM-1688-{offerId}",
+                    1m,
+                    "policy:ozon-card-group");
+        }
+
+        if (attribute.Id == 4295 || target is "俄罗斯尺码" or "russiansize")
+        {
+            var sizeFact = facts.FirstOrDefault(fact => SizeAliases.Contains(fact.NormalizedLabel));
+            return sizeFact is null
+                ? null
+                : new AttributeResolution(
+                    attribute.Id,
+                    attribute.Name,
+                    attribute.IsRequired,
+                    attribute.DictionaryId,
+                    AttributeResolutionStatuses.ConversionRequired,
+                    sizeFact.Fact.Label,
+                    sizeFact.Fact.Value,
+                    sizeFact.Fact.Source,
+                    Math.Min(0.95m, EvidenceConfidence(sizeFact.Fact.Source)),
+                    AttributeMatchMethods.Conversion);
+        }
+
+        if (OriginAliases.Contains(target))
+        {
+            var originFact = facts.FirstOrDefault(fact => OriginAliases.Contains(fact.NormalizedLabel));
+            var value = originFact is null || IsChinaLocation(originFact.Fact.Value)
+                ? "China"
+                : originFact.Fact.Value;
+            var source = originFact is null ? "policy:default-origin" : "conversion:origin-country";
+            return new AttributeResolution(
+                attribute.Id,
+                attribute.Name,
+                attribute.IsRequired,
+                attribute.DictionaryId,
+                attribute.DictionaryId > 0
+                    ? AttributeResolutionStatuses.DictionaryValueRequired
+                    : AttributeResolutionStatuses.Resolved,
+                originFact?.Fact.Label ?? "默认原产国",
+                value,
+                source,
+                originFact is null ? 0.90m : 0.98m,
+                originFact is null ? AttributeMatchMethods.Policy : AttributeMatchMethods.Conversion);
+        }
+
+        if (attribute.Id == 8229)
+        {
+            return PolicyResolution(
+                attribute,
+                AttributeResolutionStatuses.PolicyRequired,
+                null,
+                0m,
+                "policy:ozon-product-type");
+        }
+
+        return null;
+    }
+
+    private static AttributeResolution PolicyResolution(
+        OzonAttributeDefinition attribute,
+        string status,
+        string? value,
+        decimal confidence,
+        string source) =>
+        new(
+            attribute.Id,
+            attribute.Name,
+            attribute.IsRequired,
+            attribute.DictionaryId,
+            status,
+            value is null ? null : "系统策略值",
+            value,
+            source,
+            confidence,
+            AttributeMatchMethods.Policy);
+
+    private static bool IsUnknownBrand(string attributeName, string sourceValue) =>
+        BrandAliases.Contains(Normalize(attributeName)) &&
+        Normalize(sourceValue) is "其他" or "其它" or "other" or "unknown";
+
+    private static bool IsChinaLocation(string value)
+    {
+        var normalized = Normalize(value);
+        string[] regions =
+        [
+            "中国", "china", "浙江", "江苏", "广东", "福建", "山东", "河北", "河南", "湖北", "湖南",
+            "安徽", "江西", "四川", "重庆", "上海", "北京", "天津", "辽宁", "吉林", "黑龙江", "陕西",
+            "山西", "甘肃", "云南", "贵州", "广西", "海南", "青海", "宁夏", "新疆", "西藏", "内蒙古",
+        ];
+        return regions.Any(normalized.Contains);
+    }
+
+    private static string ExtractOfferId(string detailUrl)
+    {
+        var pathMatch = Regex.Match(
+            detailUrl,
+            @"/offer/(\d+)(?:\.html)?(?:[/?#]|$)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (pathMatch.Success)
+        {
+            return pathMatch.Groups[1].Value;
+        }
+
+        if (!Uri.TryCreate(detailUrl, UriKind.Absolute, out var uri)) return string.Empty;
+        foreach (var part in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var pair = part.Split('=', 2);
+            if (pair.Length == 2 && string.Equals(pair[0], "offerId", StringComparison.OrdinalIgnoreCase))
+            {
+                return Uri.UnescapeDataString(pair[1]);
+            }
+        }
+        return string.Empty;
     }
 
     private static AttributeResolution Resolution(
@@ -181,9 +336,11 @@ public static class AttributeCoverageResolver
             }
 
             var score = Math.Min(labelMatch.Score, EvidenceConfidence(fact.Fact.Source));
-            if (best is null || score > best.Score)
+            if (best is null ||
+                labelMatch.Score > best.LabelScore ||
+                (labelMatch.Score == best.LabelScore && score > best.Score))
             {
-                best = new Match(fact.Fact, score, labelMatch.Method);
+                best = new Match(fact.Fact, score, labelMatch.Score, labelMatch.Method);
             }
         }
 
@@ -212,6 +369,10 @@ public static class AttributeCoverageResolver
         }
 
         var similarity = BigramDice(attribute, fact);
+        if (UnsafeContainmentTerms.Contains(attribute) || UnsafeContainmentTerms.Contains(fact))
+        {
+            return new LabelMatch(0m, AttributeMatchMethods.None);
+        }
         if (similarity >= 0.35m)
         {
             return new LabelMatch(
@@ -278,7 +439,7 @@ public static class AttributeCoverageResolver
 
     private sealed record LabelMatch(decimal Score, string Method);
 
-    private sealed record Match(DetailFactDto Fact, decimal Score, string Method);
+    private sealed record Match(DetailFactDto Fact, decimal Score, decimal LabelScore, string Method);
 }
 
 public static class AttributeResolutionStatuses
@@ -286,6 +447,8 @@ public static class AttributeResolutionStatuses
     public const string Resolved = "resolved";
     public const string DictionaryValueRequired = "dictionaryValueRequired";
     public const string ReviewRequired = "reviewRequired";
+    public const string PolicyRequired = "policyRequired";
+    public const string ConversionRequired = "conversionRequired";
     public const string Missing = "missing";
 }
 
@@ -296,6 +459,8 @@ public static class AttributeMatchMethods
     public const string Alias = "semanticAlias";
     public const string Containment = "safeContainment";
     public const string BigramCandidate = "bigramCandidate";
+    public const string Policy = "policy";
+    public const string Conversion = "conversion";
 }
 
 public sealed record AttributeCoverageReport(
@@ -318,6 +483,12 @@ public sealed record AttributeCoverageReport(
 
     public int ReviewRequiredCount => Attributes.Count(attribute =>
         attribute.IsRequired && attribute.Status == AttributeResolutionStatuses.ReviewRequired);
+
+    public int PolicyRequiredCount => Attributes.Count(attribute =>
+        attribute.IsRequired && attribute.Status == AttributeResolutionStatuses.PolicyRequired);
+
+    public int ConversionRequiredCount => Attributes.Count(attribute =>
+        attribute.IsRequired && attribute.Status == AttributeResolutionStatuses.ConversionRequired);
 
     public bool IsReadyForSubmission => RequiredCount > 0 && ReadyRequiredCount == RequiredCount;
 }

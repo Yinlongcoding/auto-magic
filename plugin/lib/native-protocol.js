@@ -5,6 +5,7 @@ export const NATIVE_MESSAGE_TYPES = Object.freeze({
   extensionReady: 'extension.ready',
   searchStart: 'search.start',
   searchAccepted: 'search.accepted',
+  searchProgress: 'search.progress',
   searchCompleted: 'search.completed',
   searchFailed: 'search.failed',
   bridgeStatus: 'bridge.status',

@@ -117,6 +117,7 @@ async function runSearchJob(job, request) {
     result: null,
   });
   await setBadge('…', '#F97316');
+  reportDetailProgress(job, 'search_page', 0, request.maxItems, null);
 
   const resultTab = await resolveSearchResultTab(job, request);
   assertTabId(resultTab.id);
@@ -130,6 +131,7 @@ async function runSearchJob(job, request) {
     LIMITS.productRenderTimeoutMs,
   );
   await jumpToPageTop(resultTab.id);
+  reportDetailProgress(job, 'search_page_ready', 0, request.maxItems, null);
 
   const filterAndSort = await applyProductFilterAndSort(resultTab.id, request, job);
   await jumpToPageTop(resultTab.id);
@@ -138,6 +140,7 @@ async function runSearchJob(job, request) {
     jobId: job.jobId,
     step: '正在完整加载筛选后的商品列表',
   });
+  reportDetailProgress(job, 'list_loading', 0, request.maxItems, null);
   const scroll = await scrollToBottomForProducts(resultTab.id);
 
   await chrome.scripting.executeScript({
@@ -155,6 +158,7 @@ async function runSearchJob(job, request) {
   if (!extraction.data.count) {
     throw new Error('页面已打开，但没有识别到商品卡片。');
   }
+  reportDetailProgress(job, 'list_ready', 0, extraction.data.count, null);
   // 广告卡片没有静态详情链接时，按列表顺序逐条解析；同一时间只等待一个新标签页。
   await resolveDynamicDetailUrls(resultTab.id, extraction.data, job);
   if (extraction.data.diagnostics) delete extraction.data.diagnostics.unresolvedDetailCards;
@@ -1309,7 +1313,8 @@ async function captureAllRenderedDetails(job, items) {
   try {
     for (let index = 0; index < queue.length; index += 1) {
       const item = queue[index] || {};
-      const cached = item.detailUrl ? cache[item.detailUrl] : null;
+      const cacheKey = getDetailCacheKey(item.detailUrl);
+      const cached = cacheKey ? cache[cacheKey] : null;
       await updateState({ status: 'running', jobId: job.jobId, step: '正在采集第' + (index + 1) + '/' + queue.length + '条商品详情' });
       if (cached?.status === 'success') {
         results.push({ ...cached, itemIndex: index, itemPosition: index + 1, productTitle: item.title ?? cached.productTitle, detailUrl: item.detailUrl });
@@ -1317,11 +1322,13 @@ async function captureAllRenderedDetails(job, items) {
         const captured = await captureRenderedDetail(job, item, index, detailTabId);
         detailTabId = captured.tabId;
         results.push(captured.result);
-        if (captured.result.status === 'success' && item.detailUrl) {
-          cache[item.detailUrl] = captured.result;
+        if (captured.result.status === 'success' && cacheKey) {
+          cache[cacheKey] = captured.result;
           await writeDetailCache(cache);
         }
       }
+      await saveDetailProgress(job, results);
+      reportDetailProgress(job, 'first_pass', index + 1, queue.length, results.at(-1));
       if ((index + 1) % DETAIL_FACT_OPTIONS.batchSize === 0 && index + 1 < queue.length) {
         await delay(DETAIL_FACT_OPTIONS.batchPauseMs);
       } else if (index + 1 < queue.length) {
@@ -1330,7 +1337,7 @@ async function captureAllRenderedDetails(job, items) {
     }
 
     const retryIndexes = results
-      .map((result, index) => result.status === 'failed' ? index : -1)
+      .map((result, index) => shouldRetryDetail(result) ? index : -1)
       .filter((index) => index >= 0);
     if (retryIndexes.length) {
       await updateState({ status: 'running', jobId: job.jobId, step: `首轮详情完成，${DETAIL_FACT_OPTIONS.retryPauseMs / 1000}秒后重试 ${retryIndexes.length} 条失败详情` });
@@ -1339,10 +1346,13 @@ async function captureAllRenderedDetails(job, items) {
         const captured = await captureRenderedDetail(job, queue[index] || {}, index, detailTabId);
         detailTabId = captured.tabId;
         results[index] = captured.result;
-        if (captured.result.status === 'success' && queue[index]?.detailUrl) {
-          cache[queue[index].detailUrl] = captured.result;
+        const cacheKey = getDetailCacheKey(queue[index]?.detailUrl);
+        if (captured.result.status === 'success' && cacheKey) {
+          cache[cacheKey] = captured.result;
           await writeDetailCache(cache);
         }
+        await saveDetailProgress(job, results);
+        reportDetailProgress(job, 'retry', index + 1, queue.length, captured.result);
         await delay(DETAIL_FACT_OPTIONS.betweenItemDelayMs);
       }
     }
@@ -1357,27 +1367,115 @@ async function captureAllRenderedDetails(job, items) {
 
 async function captureRenderedDetail(job, item, itemIndex, existingTabId = null) {
   const base = { itemIndex, itemPosition: itemIndex + 1, productTitle: item?.title ?? null, detailUrl: item?.detailUrl ?? null };
-  if (!item?.detailUrl) return { tabId: existingTabId, result: { ...base, status: 'failed', errors: ['列表记录没有详情链接。'], facts: [] } };
+  if (!item?.detailUrl) return { tabId: existingTabId, result: { ...base, status: 'failed', failureCode: 'missing_url', errors: ['列表记录没有详情链接。'], facts: [] } };
   let tabId = existingTabId;
-  try {
-    if (!Number.isInteger(tabId)) {
-      const detailTab = await chrome.tabs.create({ url: 'about:blank', active: false });
-      assertTabId(detailTab.id);
-      tabId = detailTab.id;
-      job.temporaryTabIds ??= new Set();
-      job.temporaryTabIds.add(tabId);
+  const deadline = Date.now() + DETAIL_FACT_OPTIONS.totalItemTimeoutMs;
+  for (let tabAttempt = 0; tabAttempt < 2; tabAttempt += 1) {
+    try {
+      tabId = await ensureReusableDetailTab(job, tabId);
       await chrome.tabs.update(tabId, { url: item.detailUrl, active: false });
-    } else {
-      await chrome.tabs.update(tabId, { url: item.detailUrl, active: false });
+      await waitForDetailDomReady(tabId, item.detailUrl, remainingTimeout(deadline, DETAIL_FACT_OPTIONS.domReadyTimeoutMs));
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['lib/detail-normalizers.js', 'content/detail-extractor.js'],
+      });
+      const preparation = await chrome.tabs.sendMessage(tabId, {
+        type: 'PREPARE_1688_RENDERED_DETAIL',
+        options: {
+          maxWaitMs: Math.min(DETAIL_FACT_OPTIONS.lazyScrollMaxWaitMs, remainingTimeout(deadline)),
+          stepDelayMs: DETAIL_FACT_OPTIONS.lazyScrollStepDelayMs,
+          bottomSettleMs: DETAIL_FACT_OPTIONS.lazyBottomSettleMs,
+          returnTopSettleMs: DETAIL_FACT_OPTIONS.lazyReturnTopSettleMs,
+        },
+      });
+      if (!preparation?.success) throw new Error(preparation?.error || '详情页懒加载准备失败。');
+      const extraction = await extractRenderedDetailOnce(tabId);
+      const facts = extraction.facts ?? [];
+      const hasAttributes = Number(extraction.diagnostics?.attributeCount ?? 0) > 0;
+      return { tabId, result: { ...base, status: hasAttributes ? 'success' : 'partial', finalUrl: extraction.finalUrl, capturedAt: extraction.capturedAt, pageTitle: extraction.pageTitle, facts, diagnostics: extraction.diagnostics ?? null, raw: extraction.raw ?? null, warnings: hasAttributes ? [] : ['详情页已加载完成，但未采集到商品属性。'], errors: [] } };
+    } catch (error) {
+      const failureCode = classifyDetailFailure(error);
+      if (failureCode === 'tab_lost' && tabAttempt === 0) {
+        job.temporaryTabIds?.delete(tabId);
+        tabId = null;
+        continue;
+      }
+      return { tabId, result: { ...base, status: 'failed', failureCode, facts: [], warnings: [], errors: [error.message] } };
     }
-    await waitForTabComplete(tabId, DETAIL_FACT_OPTIONS.renderedPageTimeoutMs);
-    await chrome.scripting.executeScript({ target: { tabId }, files: ['content/detail-extractor.js'] });
-    const extraction = await waitForRenderedDetailExtraction(tabId, DETAIL_FACT_OPTIONS.renderedPageTimeoutMs);
-    const facts = extraction.facts ?? [];
-    return { tabId, result: { ...base, status: facts.length ? 'success' : 'partial', finalUrl: extraction.finalUrl, capturedAt: extraction.capturedAt, pageTitle: extraction.pageTitle, facts, diagnostics: extraction.diagnostics ?? null, raw: extraction.raw ?? null, warnings: facts.length ? [] : ['未采集到详情事实。'], errors: [] } };
-  } catch (error) {
-    return { tabId, result: { ...base, status: 'failed', facts: [], warnings: [], errors: [error.message] } };
   }
+  return { tabId, result: { ...base, status: 'failed', failureCode: 'tab_lost', facts: [], warnings: [], errors: ['详情标签页重建失败。'] } };
+}
+
+async function ensureReusableDetailTab(job, existingTabId) {
+  if (Number.isInteger(existingTabId)) {
+    try {
+      await chrome.tabs.get(existingTabId);
+      return existingTabId;
+    } catch {
+      job.temporaryTabIds?.delete(existingTabId);
+    }
+  }
+  const detailTab = await chrome.tabs.create({ url: 'about:blank', active: false });
+  assertTabId(detailTab.id);
+  job.temporaryTabIds ??= new Set();
+  job.temporaryTabIds.add(detailTab.id);
+  return detailTab.id;
+}
+
+function remainingTimeout(deadline, maximum = Number.POSITIVE_INFINITY) {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw new Error('DETAIL_TIMEOUT: 详情页总处理时间超过限制。');
+  return Math.max(1_000, Math.min(remaining, maximum));
+}
+
+function classifyDetailFailure(error) {
+  const message = String(error?.message ?? error ?? '');
+  if (/No tab with id|tab was closed|标签页已被关闭/i.test(message)) return 'tab_lost';
+  if (/验证码|安全验证|访问限制|punish/i.test(message)) return 'captcha_blocked';
+  if (/DETAIL_ERROR_PAGE|ERR_|network error|网络错误页/i.test(message)) return 'network_error';
+  if (/DETAIL_TIMEOUT|超时/i.test(message)) return 'load_timeout';
+  if (/渲染|懒加载|解析器|未采集到/i.test(message)) return 'incomplete_render';
+  return 'unknown';
+}
+
+function shouldRetryDetail(result) {
+  return result?.status === 'failed' &&
+    ['tab_lost', 'captcha_blocked', 'network_error', 'load_timeout', 'incomplete_render', 'unknown'].includes(result.failureCode);
+}
+
+function getDetailCacheKey(detailUrl) {
+  if (!detailUrl) return null;
+  try {
+    const url = new URL(detailUrl);
+    const offerId = getOfferIdFromUrl(url);
+    return /^\d+$/.test(offerId ?? '') ? `${offerId}:${DETAIL_FACT_OPTIONS.cacheVersion}` : null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveDetailProgress(job, results) {
+  await chrome.storage.local.set({
+    [`detailProgress:${job.jobId}`]: {
+      updatedAt: new Date().toISOString(),
+      results,
+    },
+  });
+}
+
+function reportDetailProgress(job, stage, completedItems, totalItems, detailResult) {
+  if (!job.desktopRequestId) return;
+  postNativeMessage(createNativeEnvelope(
+    NATIVE_MESSAGE_TYPES.searchProgress,
+    job.desktopRequestId,
+    {
+      jobId: job.jobId,
+      stage,
+      completedItems,
+      totalItems,
+      message: detailResult ? `商品 ${detailResult.itemPosition}：${detailResult.status}` : null,
+    },
+  ));
 }
 
 async function readDetailCache() {
@@ -1389,28 +1487,69 @@ async function writeDetailCache(cache) {
   await chrome.storage.local.set({ detailCache: cache });
 }
 
-async function waitForRenderedDetailExtraction(tabId, timeoutMs) {
+async function extractRenderedDetailOnce(tabId) {
+  const response = await chrome.tabs.sendMessage(tabId, {
+    type: 'EXTRACT_1688_RENDERED_DETAIL',
+    options: {
+      maxFacts: DETAIL_FACT_OPTIONS.maxFacts,
+      maxImages: DETAIL_FACT_OPTIONS.maxImages,
+      maxPriceTexts: DETAIL_FACT_OPTIONS.maxPriceTexts,
+      maxSkuTexts: DETAIL_FACT_OPTIONS.maxSkuTexts,
+      skuInteractionDelayMs: DETAIL_FACT_OPTIONS.skuInteractionDelayMs,
+    },
+  });
+  if (!response?.success) throw new Error(response?.error || '详情页解析器没有返回有效结果。');
+  const diagnostics = response.data?.diagnostics ?? null;
+  if (diagnostics?.blocked) throw new Error('1688详情页触发了验证码或访问限制。');
+  if (!response.data?.ready) throw new Error('详情页懒加载流程未完成。');
+  return { ...response.data, diagnostics: { ...diagnostics, attempts: 1, waitMs: 0 } };
+}
+
+async function waitForDetailDomReady(tabId, expectedUrl, timeoutMs) {
   const startedAt = Date.now();
-  let attempts = 0;
-  let latestDiagnostics = null;
   let latestError = null;
   while (Date.now() - startedAt < timeoutMs) {
-    attempts += 1;
-    try {
-      const response = await chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_1688_RENDERED_DETAIL', options: { maxFacts: DETAIL_FACT_OPTIONS.maxFacts, maxImages: DETAIL_FACT_OPTIONS.maxImages, maxPriceTexts: DETAIL_FACT_OPTIONS.maxPriceTexts, maxSkuTexts: DETAIL_FACT_OPTIONS.maxSkuTexts } });
-      if (!response?.success) latestError = response?.error || '详情页解析器没有返回有效结果。';
-      else {
-        latestDiagnostics = response.data?.diagnostics ?? null;
-        if (latestDiagnostics?.blocked) throw new Error('1688详情页触发了验证码或访问限制。');
-        if (response.data?.ready) return { ...response.data, diagnostics: { ...latestDiagnostics, attempts, waitMs: Date.now() - startedAt } };
-      }
-    } catch (error) {
-      if (/验证码|访问限制/.test(error.message)) throw error;
-      latestError = error.message;
+    const tab = await chrome.tabs.get(tabId);
+    if (/^(?:chrome-error|about:neterror):/i.test(tab.url ?? '')) {
+      throw new Error('DETAIL_ERROR_PAGE: Chrome详情标签页显示网络错误页。');
     }
-    await delay(DETAIL_FACT_OPTIONS.renderedPollDelayMs);
+    if (isExpectedDetailLocation(tab.url, expectedUrl)) {
+      try {
+        const [{ result }] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => ({
+            hasBody: Boolean(document.body),
+            href: location.href,
+          }),
+        });
+        if (result?.hasBody && isExpectedDetailLocation(result.href, expectedUrl)) return;
+      } catch (error) {
+        latestError = error.message;
+        if (/Frame with ID 0 is showing error page|ERR_/i.test(latestError)) {
+          throw new Error(`DETAIL_ERROR_PAGE: ${latestError}`);
+        }
+      }
+    }
+    await delay(DETAIL_FACT_OPTIONS.domReadyPollDelayMs);
   }
-  throw new Error('等待1688详情属性渲染超时' + (latestDiagnostics ? '；最后诊断：' + JSON.stringify(latestDiagnostics) : '') + (latestError ? '；最后错误：' + latestError : ''));
+  throw new Error('DETAIL_TIMEOUT: 等待详情页DOM可用超时' + (latestError ? `；最后错误：${latestError}` : ''));
+}
+
+function isExpectedDetailLocation(actualValue, expectedValue) {
+  try {
+    const actual = new URL(actualValue);
+    const expected = new URL(expectedValue);
+    if (!isAllowed1688Url(actual.href)) return false;
+    const expectedOfferId = getOfferIdFromUrl(expected);
+    if (expectedOfferId) return getOfferIdFromUrl(actual) === expectedOfferId;
+    return actual.hostname === expected.hostname && actual.pathname === expected.pathname;
+  } catch {
+    return false;
+  }
+}
+
+function getOfferIdFromUrl(url) {
+  return url.searchParams.get('offerId') ?? url.pathname.match(/\/offer\/(\d+)/)?.[1] ?? null;
 }
 function waitForSearchResultTab(sourceTabId, timeoutMs) {
   return new Promise((resolve, reject) => {

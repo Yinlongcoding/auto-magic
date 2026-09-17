@@ -9,6 +9,7 @@ internal static class NativeHostProgram
     [
         BridgeProtocol.MessageTypes.ExtensionReady,
         BridgeProtocol.MessageTypes.SearchAccepted,
+        BridgeProtocol.MessageTypes.SearchProgress,
         BridgeProtocol.MessageTypes.SearchCompleted,
         BridgeProtocol.MessageTypes.SearchFailed,
         BridgeProtocol.MessageTypes.BridgeStatus,

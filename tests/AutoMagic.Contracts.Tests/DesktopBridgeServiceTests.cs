@@ -15,6 +15,8 @@ public sealed class DesktopBridgeServiceTests
         var service = new DesktopBridgeService(
             NullLogger<DesktopBridgeService>.Instance,
             pipeName);
+        SearchProgressPayload? observedProgress = null;
+        service.SearchProgressChanged += (_, progress) => observedProgress = progress;
         await service.StartAsync(CancellationToken.None);
 
         try
@@ -52,6 +54,17 @@ public sealed class DesktopBridgeServiceTests
             Assert.Equal(80.75m, requestPayload.ProcurementMaximumCny);
             Assert.Equal(ProductSortModes.Sales, requestPayload.SortMode);
             Assert.True(requestPayload.IncludeDetailFacts);
+
+            await LengthPrefixedJson.WriteEnvelopeAsync(
+                client,
+                ProtocolEnvelope.Create(
+                    searchRequest.RequestId,
+                    BridgeProtocol.MessageTypes.SearchProgress,
+                    new SearchProgressPayload("job-1", "first_pass", 1, 10, "商品 1：success")),
+                timeout.Token);
+            await WaitUntilAsync(() => observedProgress is not null, timeout.Token);
+            Assert.Equal(1, observedProgress!.CompletedItems);
+            Assert.Equal("first_pass", observedProgress.Stage);
 
             var resultPayload = new SearchResultPayload(
                 "连衣裙",

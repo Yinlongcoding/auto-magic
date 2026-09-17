@@ -35,7 +35,8 @@ public static class SemanticDictionaryCandidateResolver
             .Select(group => group.First())
             .OrderBy(value => value.ValueId)
             .Take(maximumCandidates)
-            .Select(value => new SemanticDictionaryCandidate(value.ValueId, value.Value))
+            .Select(value => new SemanticDictionaryCandidate(
+                value.ValueId, value.Value, value.Info, value.Picture))
             .ToArray();
     }
 

@@ -263,3 +263,114 @@ public static class RussianSizeRuleCatalog
         return normalized.ToString();
     }
 }
+
+public static class RussianSizeConversionDecisionFactory
+{
+    public static FieldConversionDecision Create(
+        long attributeId,
+        IReadOnlyList<string> sourceFactIds,
+        RussianSizeBatchConversionResult batch,
+        IReadOnlyList<SemanticDictionaryCandidate> dictionaryCandidates,
+        bool dropUnsupportedSourceOptions = false)
+    {
+        ArgumentNullException.ThrowIfNull(sourceFactIds);
+        ArgumentNullException.ThrowIfNull(batch);
+        ArgumentNullException.ThrowIfNull(dictionaryCandidates);
+
+        var dictionaryByText = dictionaryCandidates
+            .GroupBy(candidate => Normalize(candidate.Value), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
+        var traces = new List<FieldConversionTrace>();
+        var selectedIds = new List<long>();
+        var textValues = new List<string>();
+        var hasAmbiguous = batch.Status == RussianSizeConversionStatuses.Ambiguous;
+        var hasMissingRule = !dropUnsupportedSourceOptions &&
+                             batch.Status == RussianSizeConversionStatuses.MissingRule;
+        var hasMissingDictionaryValue = false;
+        var mappedSourceOptionCount = 0;
+        var droppedSourceOptionCount = 0;
+
+        foreach (var option in batch.Options)
+        {
+            if (!option.Conversion.IsMapped)
+            {
+                var canDrop = dropUnsupportedSourceOptions &&
+                              option.Conversion.Status == RussianSizeConversionStatuses.MissingRule;
+                traces.Add(new FieldConversionTrace(
+                    option.SkuKey,
+                    option.Conversion.SourceValue,
+                    string.Join("/", option.Conversion.CandidateRussianValues),
+                    null,
+                    canDrop ? FieldConversionStatuses.Dropped : option.Conversion.Status));
+                droppedSourceOptionCount += canDrop ? 1 : 0;
+                hasAmbiguous |= option.Conversion.Status == RussianSizeConversionStatuses.Ambiguous;
+                hasMissingRule |= !canDrop && option.Conversion.Status == RussianSizeConversionStatuses.MissingRule;
+                continue;
+            }
+
+            mappedSourceOptionCount++;
+
+            foreach (var russianValue in option.Conversion.CandidateRussianValues)
+            {
+                textValues.Add(russianValue);
+                var matches = dictionaryByText.GetValueOrDefault(Normalize(russianValue)) ?? [];
+                if (matches.Length == 1)
+                {
+                    selectedIds.Add(matches[0].ValueId);
+                    traces.Add(new FieldConversionTrace(
+                        option.SkuKey,
+                        option.Conversion.SourceValue,
+                        russianValue,
+                        matches[0].ValueId,
+                        FieldConversionStatuses.Mapped));
+                }
+                else
+                {
+                    traces.Add(new FieldConversionTrace(
+                        option.SkuKey,
+                        option.Conversion.SourceValue,
+                        russianValue,
+                        null,
+                        matches.Length > 1
+                            ? FieldConversionStatuses.Ambiguous
+                            : FieldConversionStatuses.MissingDictionaryValue));
+                    hasAmbiguous |= matches.Length > 1;
+                    hasMissingDictionaryValue |= matches.Length == 0;
+                }
+            }
+        }
+
+        hasMissingRule |= mappedSourceOptionCount == 0;
+
+        var status = hasMissingRule
+            ? FieldConversionStatuses.MissingRule
+            : hasMissingDictionaryValue
+                ? FieldConversionStatuses.MissingDictionaryValue
+            : hasAmbiguous
+                ? FieldConversionStatuses.Ambiguous
+                : FieldConversionStatuses.Mapped;
+        var reason = status == FieldConversionStatuses.Mapped
+            ? droppedSourceOptionCount > 0
+                ? $"逐SKU尺码已通过规则集{batch.RuleSetId}转换；{droppedSourceOptionCount}个无可靠目标值的源尺码已按策略舍弃。"
+                : $"逐SKU尺码已通过规则集{batch.RuleSetId}转换，并全部解析到Ozon字典值。"
+            : $"规则集{batch.RuleSetId}的转换结果仍有未解析或冲突的Ozon字典值。";
+        return new FieldConversionDecision(
+            attributeId,
+            status,
+            sourceFactIds,
+            textValues.Distinct(StringComparer.Ordinal).ToArray(),
+            dictionaryCandidates,
+            status == FieldConversionStatuses.Mapped
+                ? selectedIds.Distinct().ToArray()
+                : [],
+            $"{RussianSizeRuleCatalog.Version}:{batch.RuleSetId}",
+            status == FieldConversionStatuses.Mapped
+                ? droppedSourceOptionCount > 0 ? 0.95m : 1m
+                : 0m,
+            reason,
+            traces);
+    }
+
+    private static string Normalize(string value) =>
+        new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+}

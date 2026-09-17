@@ -78,3 +78,7 @@ test('creates a versioned result envelope', () => {
     },
   );
 });
+
+test('declares progress heartbeats for long-running detail capture', () => {
+  assert.equal(protocol.NATIVE_MESSAGE_TYPES.searchProgress, 'search.progress');
+});

@@ -111,6 +111,87 @@ public sealed class AttributeCoverageResolverTests
         Assert.False(report.IsReadyForSubmission);
     }
 
+    [Fact]
+    public void Resolve_AppliesReusableOzonPoliciesWithoutFabricatingSourceFacts()
+    {
+        var schema = new OzonCategorySchema(
+            200000933,
+            93211,
+            DateTimeOffset.UtcNow,
+            [
+                Attribute(4295, "俄罗斯尺码", required: true, dictionaryId: 835),
+                Attribute(8292, "合并至一张卡片", required: true),
+                Attribute(31, "服装和鞋类品牌", required: true, dictionaryId: 28732849),
+                Attribute(8229, "类型", required: true, dictionaryId: 1960),
+                Attribute(9163, "性别", required: true, dictionaryId: 320),
+                Attribute(10096, "商品颜色", required: true, dictionaryId: 1494),
+                Attribute(4389, "原产国", required: false, dictionaryId: 1935),
+                Attribute(4501, "风格", required: false, dictionaryId: 627),
+                Attribute(4496, "材料", required: false, dictionaryId: 1503),
+                Attribute(4180, "名称", required: false),
+            ]);
+        var snapshot = new DetailFactSnapshotDto(
+            "https://detail.1688.com/offer/925890695648.html",
+            "2026-09-17T00:00:00Z",
+            "2025夏季女装连衣裙",
+            [
+                new DetailFactDto("商品名称", "2025夏季女装连衣裙", "document.title"),
+                new DetailFactDto("款式", "吊带款", "decision-attributes"),
+                new DetailFactDto("主面料成分", "涤纶", "decision-attributes"),
+                new DetailFactDto("品牌", "其他", "decision-attributes"),
+                new DetailFactDto("产地", "浙江", "normal-attributes"),
+                new DetailFactDto("尺码", "XS、S、M、L", "normal-attributes"),
+                new DetailFactDto("风格类型", "气质通勤", "normal-attributes"),
+                new DetailFactDto("风格", "通勤风", "normal-attributes"),
+                new DetailFactDto("颜色", "白色", "normal-attributes"),
+            ],
+            null);
+
+        var report = AttributeCoverageResolver.Resolve(schema, snapshot);
+        var byId = report.Attributes.ToDictionary(attribute => attribute.AttributeId);
+
+        Assert.Equal(AttributeResolutionStatuses.ConversionRequired, byId[4295].Status);
+        Assert.Equal(AttributeResolutionStatuses.Resolved, byId[8292].Status);
+        Assert.Equal("AM-1688-925890695648", byId[8292].SourceValue);
+        Assert.Equal(AttributeMatchMethods.Policy, byId[8292].MatchMethod);
+        Assert.Equal(AttributeResolutionStatuses.ReviewRequired, byId[31].Status);
+        Assert.Equal(AttributeResolutionStatuses.PolicyRequired, byId[8229].Status);
+        Assert.Null(byId[8229].SourceLabel);
+        Assert.Equal("China", byId[4389].SourceValue);
+        Assert.Equal(AttributeMatchMethods.Conversion, byId[4389].MatchMethod);
+        Assert.Equal("风格", byId[4501].SourceLabel);
+        Assert.Equal("主面料成分", byId[4496].SourceLabel);
+        Assert.Equal("商品名称", byId[4180].SourceLabel);
+        Assert.Equal(1, report.ReadyRequiredCount);
+        Assert.Equal(2, report.DictionaryRequiredCount);
+        Assert.Equal(1, report.ConversionRequiredCount);
+        Assert.Equal(1, report.PolicyRequiredCount);
+        Assert.Equal(1, report.ReviewRequiredCount);
+        Assert.Equal(0, report.MissingRequiredCount);
+    }
+
+    [Fact]
+    public void Resolve_DefaultsOriginToChinaWhen1688HasNoOriginEvidence()
+    {
+        var schema = new OzonCategorySchema(
+            10,
+            20,
+            DateTimeOffset.UtcNow,
+            [Attribute(4389, "原产国", required: true, dictionaryId: 1935)]);
+        var snapshot = new DetailFactSnapshotDto(
+            "https://detail.1688.com/offer/1.html",
+            "2026-09-17T00:00:00Z",
+            "示例商品",
+            [new DetailFactDto("材质", "棉", "normal-attributes")],
+            null);
+
+        var resolution = Assert.Single(AttributeCoverageResolver.Resolve(schema, snapshot).Attributes);
+
+        Assert.Equal("China", resolution.SourceValue);
+        Assert.Equal("policy:default-origin", resolution.Source);
+        Assert.Equal(AttributeResolutionStatuses.DictionaryValueRequired, resolution.Status);
+    }
+
     private static OzonAttributeDefinition Attribute(
         long id,
         string name,

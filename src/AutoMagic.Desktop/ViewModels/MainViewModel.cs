@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Text.Json;
 using System.Windows.Threading;
 using AutoMagic.Application.ExchangeRates;
@@ -29,12 +30,19 @@ public partial class MainViewModel : ObservableObject
     private OzonCategorySchema? _ozonSchema;
     private DetailFactSnapshotDto? _latestDetailSnapshot;
     private IReadOnlyList<DetailCollectionResultDto> _latestDetailResults = [];
+    private string _latestCollectionId = string.Empty;
     private int _ozonSchemaRequestRevision;
     private CancellationTokenSource? _ozonSettingsSaveDebounce;
     private bool _isRestoringOzonSettings;
     private CancellationTokenSource? _qwenSettingsSaveDebounce;
     private bool _isRestoringQwenSettings;
     private SemanticMappingResponse? _latestQwenMappingResponse;
+    private FieldMatchingInput? _latestFieldMatchingInput;
+    private AttributeCoverageReport? _latestCoverageReport;
+    private FieldMatchingEnginePlan? _latestFieldMatchingPlan;
+    private IReadOnlyCollection<FieldConversionDecision> _latestConversionResults = [];
+    private IReadOnlyDictionary<long, IReadOnlyList<SemanticDictionaryCandidate>> _latestDictionaryCandidates =
+        new Dictionary<long, IReadOnlyList<SemanticDictionaryCandidate>>();
 
     [ObservableProperty]
     private string _keyword = "连衣裙";
@@ -150,6 +158,27 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _qwenDictionaryStatus = "首次映射通过校验后，可搜索 Ozon 参考值并再次复核。";
 
+    [ObservableProperty]
+    private DetailCollectionResultDto? _selectedFieldMatchingDetail;
+
+    [ObservableProperty]
+    private string _fieldMatchingStatus = "完成一次详情采集后，可以在这里审阅匹配输入。";
+
+    [ObservableProperty]
+    private string _fieldMatchingInputJson = "尚未生成字段匹配输入。";
+
+    [ObservableProperty]
+    private string _fieldMatchingPlanJson = "尚未生成通用匹配引擎计划。";
+
+    [ObservableProperty]
+    private string _fieldMatchingFinalOutputJson = "尚未生成统一最终输出。";
+
+    [ObservableProperty]
+    private string _fieldMatchingFinalStatus = "等待字段匹配输入和引擎计划。";
+
+    [ObservableProperty]
+    private string _conversionRuleStatus = "等待识别可用的转换规则。";
+
     public MainViewModel(
         ISearchBridge searchBridge,
         IExchangeRateService exchangeRateService,
@@ -173,6 +202,7 @@ public partial class MainViewModel : ObservableObject
         _dispatcher = Dispatcher.CurrentDispatcher;
         _statusText = GetConnectionText(searchBridge.IsExtensionConnected);
         _searchBridge.ConnectionChanged += OnConnectionChanged;
+        _searchBridge.SearchProgressChanged += OnSearchProgressChanged;
     }
 
     public ObservableCollection<ProductItemDto> Products { get; } = [];
@@ -188,6 +218,22 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<SemanticTargetMapping> QwenMappings { get; } = [];
 
     public ObservableCollection<SemanticMappingValidationIssue> QwenValidationIssues { get; } = [];
+
+    public ObservableCollection<DetailCollectionResultDto> FieldMatchingProducts { get; } = [];
+
+    public ObservableCollection<FieldMatchingSourceFact> FieldMatchingFacts { get; } = [];
+
+    public ObservableCollection<FieldMatchingMediaEvidence> FieldMatchingMedia { get; } = [];
+
+    public ObservableCollection<FieldMatchingTextEvidence> FieldMatchingPriceEvidence { get; } = [];
+
+    public ObservableCollection<FieldMatchingTextEvidence> FieldMatchingSkuEvidence { get; } = [];
+
+    public ObservableCollection<FieldMatchingTargetAttribute> FieldMatchingTargets { get; } = [];
+
+    public ObservableCollection<FieldMatchingEngineAttribute> FieldMatchingEngineAttributes { get; } = [];
+
+    public ObservableCollection<FieldMatchingFinalTargetMapping> FieldMatchingFinalMappings { get; } = [];
 
     public string QwenModelId => QwenMappingRuntime.ModelId;
 
@@ -210,6 +256,7 @@ public partial class MainViewModel : ObservableObject
         _initialized = true;
         await Task.WhenAll(RefreshExchangeRatesAsync(), LoadOzonCatalogAsync());
         await Task.WhenAll(RestoreOzonTestSettingsAsync(), RestoreQwenTestSettingsAsync());
+        await RestoreLatestCollectionAsync();
     }
 
     private bool CanSearch() =>
@@ -233,6 +280,10 @@ public partial class MainViewModel : ObservableObject
         RawJson = "等待插件返回数据…";
         _latestDetailSnapshot = null;
         _latestDetailResults = [];
+        _latestCollectionId = string.Empty;
+        FieldMatchingProducts.Clear();
+        SelectedFieldMatchingDetail = null;
+        ClearFieldMatchingPreview("正在等待新的详情采集结果。");
         RefreshAttributeCoverage();
         ResetQwenMappingOutput("正在等待新的1688详情事实。");
 
@@ -246,28 +297,8 @@ public partial class MainViewModel : ObservableObject
                 SelectedSortMode,
                 includeDetailFacts: true,
                 cancellationToken: CancellationToken.None);
-            foreach (var item in result.Items)
-            {
-                Products.Add(item);
-            }
-
-            ResultCount = result.Count;
             var snapshotPath = await _collectionSnapshotStore.SaveAsync(result);
-            RawJson = JsonSerializer.Serialize(result, BridgeJson.IndentedOptions);
-            _latestDetailResults = result.DetailResults ?? [];
-            _latestDetailSnapshot = result.DetailSnapshot ?? _latestDetailResults
-                .Where(item => string.Equals(item.Status, "success", StringComparison.OrdinalIgnoreCase))
-                .Select(item => new DetailFactSnapshotDto(
-                    item.FinalUrl ?? item.DetailUrl ?? string.Empty,
-                    item.CapturedAt ?? result.CapturedAt,
-                    item.PageTitle,
-                    item.Facts,
-                    item.Diagnostics,
-                    item.Raw))
-                .FirstOrDefault();
-            RefreshAttributeCoverage();
-            RefreshQwenReadinessStatus();
-            RunQwenMappingCommand.NotifyCanExecuteChanged();
+            ApplyCollectionResult(result, Path.GetFileName(snapshotPath));
             var successCount = _latestDetailResults.Count(item => item.Status == "success");
             var partialCount = _latestDetailResults.Count(item => item.Status == "partial");
             var failedCount = _latestDetailResults.Count(item => item.Status == "failed");
@@ -283,6 +314,47 @@ public partial class MainViewModel : ObservableObject
         {
             IsBusy = false;
         }
+    }
+
+    private async Task RestoreLatestCollectionAsync()
+    {
+        try
+        {
+            var stored = await _collectionSnapshotStore.LoadLatestAsync();
+            if (stored is null)
+            {
+                return;
+            }
+
+            ApplyCollectionResult(stored.Result, Path.GetFileName(stored.Directory));
+            StatusText =
+                $"已加载最近采集批次 {_latestCollectionId}：列表 {stored.Result.Count} 条，详情 {_latestDetailResults.Count} 条。";
+        }
+        catch (Exception error)
+        {
+            FieldMatchingStatus = $"恢复最近采集结果失败：{error.Message}";
+        }
+    }
+
+    private void ApplyCollectionResult(SearchResultPayload result, string collectionId)
+    {
+        Products.Clear();
+        foreach (var item in result.Items) Products.Add(item);
+        ResultCount = result.Count;
+        RawJson = JsonSerializer.Serialize(result, BridgeJson.IndentedOptions);
+        _latestCollectionId = collectionId;
+        _latestDetailResults = result.DetailResults ?? [];
+        FieldMatchingProducts.Clear();
+        foreach (var detail in _latestDetailResults) FieldMatchingProducts.Add(detail);
+        SelectedFieldMatchingDetail = _latestDetailResults.FirstOrDefault(item =>
+            string.Equals(item.Status, "success", StringComparison.OrdinalIgnoreCase))
+            ?? _latestDetailResults.FirstOrDefault();
+        _latestDetailSnapshot = CreateDetailSnapshot(SelectedFieldMatchingDetail, result.CapturedAt)
+            ?? result.DetailSnapshot;
+        RefreshFieldMatchingInput();
+        RefreshAttributeCoverage();
+        RefreshQwenReadinessStatus();
+        RunQwenMappingCommand.NotifyCanExecuteChanged();
     }
 
     private bool CanLoadOzonSchema() =>
@@ -341,6 +413,7 @@ public partial class MainViewModel : ObservableObject
             OzonSchemaJson = JsonSerializer.Serialize(_ozonSchema, BridgeJson.IndentedOptions);
             OzonSchemaStatus =
                 $"凭证验证成功：{selectedCategory.DisplayName} > {selectedType.Name}；读取 {_ozonSchema.Attributes.Count} 个属性，其中必填 {_ozonSchema.RequiredCount} 个。";
+            RefreshFieldMatchingInput();
             RefreshAttributeCoverage();
             ResetQwenMappingOutput("Schema和详情事实就绪后，可以执行AI语义映射。");
             RefreshQwenReadinessStatus();
@@ -613,8 +686,12 @@ public partial class MainViewModel : ObservableObject
         !IsResolvingQwenDictionaries &&
         !IsBusy &&
         !string.IsNullOrWhiteSpace(QwenApiKey) &&
+        !string.IsNullOrWhiteSpace(OzonClientId) &&
+        !string.IsNullOrWhiteSpace(OzonApiKey) &&
         _ozonSchema is not null &&
         _latestDetailSnapshot is not null &&
+        _latestFieldMatchingInput is not null &&
+        _latestCoverageReport is not null &&
         SelectedOzonCategory is not null &&
         SelectedOzonType is not null;
 
@@ -623,6 +700,8 @@ public partial class MainViewModel : ObservableObject
     {
         if (_ozonSchema is null ||
             _latestDetailSnapshot is null ||
+            _latestFieldMatchingInput is null ||
+            _latestCoverageReport is null ||
             SelectedOzonCategory is null ||
             SelectedOzonType is null)
         {
@@ -634,17 +713,49 @@ public partial class MainViewModel : ObservableObject
         _latestQwenMappingResponse = null;
         QwenMappings.Clear();
         QwenValidationIssues.Clear();
-        QwenRawResponseJson = "等待百炼返回映射结果…";
-        QwenMappingStatus = $"正在调用 {QwenMappingRuntime.ModelId} 执行语义映射…";
+        QwenRawResponseJson = "正在准备Ozon合法字典候选…";
+        QwenMappingStatus = "通用匹配引擎正在执行确定性匹配和Ozon字典查询…";
         try
         {
             await SaveQwenTestSettingsAsync(CancellationToken.None);
-            var request = SemanticMappingRequestFactory.CreateRequiredAttributeRequest(
+            var initialPlan = FieldMatchingEnginePlanBuilder.Create(
+                _latestFieldMatchingInput,
+                _latestCoverageReport);
+            var candidates = await LoadPreQwenDictionaryCandidatesAsync(initialPlan);
+            _latestDictionaryCandidates = candidates;
+            var preparedPlan = FieldMatchingEnginePlanBuilder.Create(
+                _latestFieldMatchingInput,
+                _latestCoverageReport,
+                candidates);
+            _latestConversionResults = await ResolveAutomaticConversionsAsync(preparedPlan);
+            PublishFieldMatchingPlan(preparedPlan);
+
+            if (preparedPlan.QwenAttributeIds.Count == 0)
+            {
+                var unresolvedRequired = preparedPlan.Attributes.Count(attribute =>
+                    attribute.IsRequired &&
+                    attribute.Status != FieldMatchingEngineStatuses.Resolved);
+                QwenRequestJson = "没有需要Qwen裁决的必填字段。";
+                QwenRawResponseJson = "未调用Qwen。";
+                QwenDictionaryStatus = $"AI前字典查询完成：{candidates.Count}个属性获得合法候选。";
+                QwenMappingStatus = unresolvedRequired == 0
+                    ? "确定性规则和字典匹配已经完成当前必填字段，无需调用Qwen。"
+                    : $"当前没有可交由Qwen裁决的字段；仍有{unresolvedRequired}个必填字段等待字典、转换或平台策略。";
+                return;
+            }
+
+            var qwenAttributeIds = preparedPlan.QwenAttributeIds.ToHashSet();
+            var request = SemanticMappingRequestFactory.CreateFromFieldMatchingInput(
                 $"automagic-{Guid.NewGuid():N}",
-                $"{SelectedOzonCategory.DisplayName} > {SelectedOzonType.Name}",
-                _ozonSchema,
-                _latestDetailSnapshot);
+                _latestFieldMatchingInput,
+                candidates,
+                qwenAttributeIds);
             QwenRequestJson = JsonSerializer.Serialize(request, SemanticMappingJson.IndentedOptions);
+            QwenRawResponseJson = "等待百炼返回受约束的语义映射结果…";
+            QwenDictionaryStatus =
+                $"AI前字典查询完成：{candidates.Count}个属性获得合法候选；" +
+                $"Qwen仅处理{qwenAttributeIds.Count}个未解决字段。";
+            QwenMappingStatus = $"正在调用 {QwenMappingRuntime.ModelId} 执行受约束语义裁决…";
 
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
             var result = await _qwenMappingService.MapAsync(
@@ -665,13 +776,14 @@ public partial class MainViewModel : ObservableObject
                     QwenMappings.Add(mapping);
                 }
 
-        QwenDictionaryStatus = "首次映射已通过本地校验；可以搜索 Ozon 参考值并再次复核。";
+                QwenDictionaryStatus += " AI响应已通过本地合同校验。";
             }
             else
             {
                 _latestQwenMappingResponse = null;
-                QwenDictionaryStatus = "首次映射未通过本地校验，暂不读取字典候选。";
+                QwenDictionaryStatus += " AI响应未通过本地合同校验。";
             }
+            RefreshFieldMatchingFinalOutput();
 
             var tokenText = result.Usage.TotalTokens > 0
                 ? $"Token {result.Usage.PromptTokens}+{result.Usage.CompletionTokens}={result.Usage.TotalTokens}"
@@ -716,6 +828,8 @@ public partial class MainViewModel : ObservableObject
     {
         if (_ozonSchema is null ||
             _latestDetailSnapshot is null ||
+            _latestFieldMatchingInput is null ||
+            _latestCoverageReport is null ||
             _latestQwenMappingResponse is null ||
             SelectedOzonCategory is null ||
             SelectedOzonType is null)
@@ -728,13 +842,36 @@ public partial class MainViewModel : ObservableObject
         QwenDictionaryStatus = "正在按未解决的文本候选搜索 Ozon 参考值…";
         try
         {
-            var candidates = await LoadDictionaryCandidatesAsync(_latestQwenMappingResponse);
-            var request = SemanticMappingRequestFactory.CreateRequiredAttributeRequest(
-                $"automagic-{Guid.NewGuid():N}",
-                $"{SelectedOzonCategory.DisplayName} > {SelectedOzonType.Name}",
-                _ozonSchema,
-                _latestDetailSnapshot,
+            var supplementalCandidates = await LoadDictionaryCandidatesAsync(_latestQwenMappingResponse);
+            var candidates = _latestDictionaryCandidates
+                .Concat(supplementalCandidates)
+                .GroupBy(pair => pair.Key)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (IReadOnlyList<SemanticDictionaryCandidate>)group
+                        .SelectMany(pair => pair.Value)
+                        .GroupBy(candidate => candidate.ValueId)
+                        .Select(candidateGroup => candidateGroup.First())
+                        .ToArray());
+            _latestDictionaryCandidates = candidates;
+            var preparedPlan = FieldMatchingEnginePlanBuilder.Create(
+                _latestFieldMatchingInput,
+                _latestCoverageReport,
                 candidates);
+            _latestQwenMappingResponse = null;
+            PublishFieldMatchingPlan(preparedPlan);
+            var qwenAttributeIds = preparedPlan.QwenAttributeIds.ToHashSet();
+            if (qwenAttributeIds.Count == 0)
+            {
+                QwenDictionaryStatus = "补充字典完成，当前没有需要Qwen再次裁决的字段。";
+                return;
+            }
+
+            var request = SemanticMappingRequestFactory.CreateFromFieldMatchingInput(
+                $"automagic-{Guid.NewGuid():N}",
+                _latestFieldMatchingInput,
+                candidates,
+                qwenAttributeIds);
             QwenRequestJson = JsonSerializer.Serialize(request, SemanticMappingJson.IndentedOptions);
 
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
@@ -758,6 +895,7 @@ public partial class MainViewModel : ObservableObject
                     QwenMappings.Add(mapping);
                 }
             }
+            RefreshFieldMatchingFinalOutput();
 
             var candidateAttributeCount = candidates.Count;
             var tokenText = result.Usage.TotalTokens > 0
@@ -826,6 +964,154 @@ public partial class MainViewModel : ObservableObject
         return candidates;
     }
 
+    private async Task<IReadOnlyDictionary<long, IReadOnlyList<SemanticDictionaryCandidate>>> LoadPreQwenDictionaryCandidatesAsync(
+        FieldMatchingEnginePlan plan)
+    {
+        var result = new Dictionary<long, IReadOnlyList<SemanticDictionaryCandidate>>();
+        var failures = new List<string>();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+        var credentials = new OzonTemporaryCredentials(OzonClientId, OzonApiKey);
+
+        foreach (var lookup in plan.DictionaryLookups)
+        {
+            try
+            {
+                IReadOnlyList<OzonDictionaryValue> values;
+                if (lookup.Strategy == DictionaryLookupStrategies.LoadAllValues)
+                {
+                    values = await _ozonDictionaryService.GetAttributeValuesAsync(
+                        credentials,
+                        plan.Target.DescriptionCategoryId!.Value,
+                        plan.Target.TypeId!.Value,
+                        lookup.AttributeId,
+                        "DEFAULT",
+                        timeout.Token);
+                }
+                else
+                {
+                    var found = new List<OzonDictionaryValue>();
+                    foreach (var text in lookup.SearchTexts.Take(60))
+                    {
+                        found.AddRange(await _ozonDictionaryService.SearchAttributeValuesAsync(
+                            credentials,
+                            plan.Target.DescriptionCategoryId!.Value,
+                            plan.Target.TypeId!.Value,
+                            lookup.AttributeId,
+                            text,
+                            timeout.Token));
+                    }
+
+                    values = found;
+                }
+
+                var candidates = values
+                    .Where(value => value.ValueId > 0 && !string.IsNullOrWhiteSpace(value.Value))
+                    .GroupBy(value => value.ValueId)
+                    .Select(group => group.First())
+                    .Take(100)
+                    .Select(value => new SemanticDictionaryCandidate(
+                        value.ValueId, value.Value, value.Info, value.Picture))
+                    .ToArray();
+                if (candidates.Length > 0)
+                {
+                    result[lookup.AttributeId] = candidates;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception error)
+            {
+                failures.Add($"{lookup.AttributeName}({lookup.AttributeId})：{error.Message}");
+            }
+        }
+
+        QwenDictionaryStatus = failures.Count == 0
+            ? $"AI前字典查询完成：{result.Count}/{plan.DictionaryLookups.Count}个属性获得候选。"
+            : $"AI前字典查询部分完成：{result.Count}/{plan.DictionaryLookups.Count}个属性获得候选；" +
+              $"{failures.Count}项失败，将保持dictionary_pending。";
+        return result;
+    }
+
+    private async Task<IReadOnlyCollection<FieldConversionDecision>> ResolveAutomaticConversionsAsync(
+        FieldMatchingEnginePlan plan)
+    {
+        if (_latestFieldMatchingInput is null ||
+            !plan.Attributes.Any(attribute =>
+                attribute.AttributeId == ConversionRuleSelector.RussianSizeAttributeId &&
+                attribute.Status == FieldMatchingEngineStatuses.ConversionRequired))
+        {
+            ConversionRuleStatus = "当前目标字段不需要已支持的自动转换规则。";
+            return [];
+        }
+
+        var selection = ConversionRuleSelector.SelectRussianSize(_latestFieldMatchingInput);
+        if (!selection.IsSelected || selection.RuleSetId is null)
+        {
+            ConversionRuleStatus = $"俄罗斯尺码：{selection.Reason}";
+            return [];
+        }
+
+        var batch = RussianSizeRuleCatalog.ConvertMany(selection.RuleSetId, selection.SourceOptions);
+        if (!batch.Options.Any(option => option.Conversion.IsMapped))
+        {
+            var unresolved = RussianSizeConversionDecisionFactory.Create(
+                selection.AttributeId, selection.SourceFactIds, batch, [], true);
+            ConversionRuleStatus = $"俄罗斯尺码转换待复核：{unresolved.Reason}";
+            return [unresolved];
+        }
+
+        try
+        {
+            var convertedTexts = batch.Options
+                .SelectMany(option => option.Conversion.CandidateRussianValues)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+            var values = await _ozonDictionaryService.GetAttributeValuesAsync(
+                new OzonTemporaryCredentials(OzonClientId, OzonApiKey),
+                plan.Target.DescriptionCategoryId!.Value,
+                plan.Target.TypeId!.Value,
+                selection.AttributeId,
+                "DEFAULT",
+                timeout.Token);
+            var candidates = SemanticDictionaryCandidateResolver.Resolve(convertedTexts, values, 100);
+            var decision = RussianSizeConversionDecisionFactory.Create(
+                selection.AttributeId,
+                selection.SourceFactIds,
+                batch,
+                candidates,
+                true);
+            ConversionRuleStatus = decision.Status == FieldConversionStatuses.Mapped
+                ? $"俄罗斯尺码自动转换完成：{selection.RuleSetId}，{decision.Traces.Count}个可追溯尺码选项。"
+                : $"俄罗斯尺码已执行规则转换，但Ozon字典解析未完成：{decision.Reason}";
+            return [decision];
+        }
+        catch (OperationCanceledException)
+        {
+            var pending = RussianSizeConversionDecisionFactory.Create(
+                selection.AttributeId,
+                selection.SourceFactIds,
+                batch,
+                [],
+                true);
+            ConversionRuleStatus = "俄罗斯尺码规则已选定，但Ozon字典查询超时，保持待转换状态。";
+            return [pending];
+        }
+        catch (Exception error)
+        {
+            var pending = RussianSizeConversionDecisionFactory.Create(
+                selection.AttributeId,
+                selection.SourceFactIds,
+                batch,
+                [],
+                true);
+            ConversionRuleStatus = $"俄罗斯尺码规则已选定，但字典解析失败：{error.Message}";
+            return [pending];
+        }
+    }
+
     private static bool NeedsDictionaryLookup(SemanticTargetMapping mapping) =>
         mapping.DictionaryResolutionRequired &&
         mapping.SelectedDictionaryValueIds.Count == 0 &&
@@ -834,6 +1120,7 @@ public partial class MainViewModel : ObservableObject
     private void RefreshAttributeCoverage()
     {
         CoverageAttributes.Clear();
+        _latestCoverageReport = null;
         if (_ozonSchema is null)
         {
             CoverageStatus = "请先读取 Ozon Schema，再执行一次商品搜索。";
@@ -849,6 +1136,7 @@ public partial class MainViewModel : ObservableObject
         }
 
         var report = AttributeCoverageResolver.Resolve(_ozonSchema, _latestDetailSnapshot);
+        _latestCoverageReport = report;
         foreach (var attribute in report.Attributes)
         {
             CoverageAttributes.Add(attribute);
@@ -857,8 +1145,161 @@ public partial class MainViewModel : ObservableObject
         CoverageJson = JsonSerializer.Serialize(report, BridgeJson.IndentedOptions);
         CoverageStatus = report.IsReadyForSubmission
             ? $"必填属性已全部就绪：{report.ReadyRequiredCount}/{report.RequiredCount}。"
-            : $"必填 {report.RequiredCount} 项：可直接使用 {report.ReadyRequiredCount}，待 Ozon 字典解析 {report.DictionaryRequiredCount}，待人工确认 {report.ReviewRequiredCount}，缺失 {report.MissingRequiredCount}。";
+            : $"必填 {report.RequiredCount} 项：可直接使用 {report.ReadyRequiredCount}，待 Ozon 字典解析 {report.DictionaryRequiredCount}，待规则转换 {report.ConversionRequiredCount}，待平台策略 {report.PolicyRequiredCount}，待人工确认 {report.ReviewRequiredCount}，缺失 {report.MissingRequiredCount}。";
+        RefreshFieldMatchingEnginePlan();
     }
+
+    private void RefreshFieldMatchingInput()
+    {
+        FieldMatchingFacts.Clear();
+        FieldMatchingMedia.Clear();
+        FieldMatchingPriceEvidence.Clear();
+        FieldMatchingSkuEvidence.Clear();
+        FieldMatchingTargets.Clear();
+
+        if (SelectedFieldMatchingDetail is null)
+        {
+            _latestFieldMatchingInput = null;
+            ClearFieldMatchingPreview("当前没有可供字段匹配的详情结果。");
+            return;
+        }
+
+        var categoryPath = SelectedOzonCategory is not null && SelectedOzonType is not null
+            ? $"{SelectedOzonCategory.DisplayName} > {SelectedOzonType.Name}"
+            : null;
+        var input = FieldMatchingInputBuilder.Create(
+            string.IsNullOrWhiteSpace(_latestCollectionId) ? "current-session" : _latestCollectionId,
+            $"preview-{SelectedFieldMatchingDetail.ItemPosition:000}",
+            SelectedFieldMatchingDetail,
+            _ozonSchema,
+            categoryPath,
+            _ozonSchema is not null && categoryPath is not null);
+        _latestFieldMatchingInput = input;
+        _latestDictionaryCandidates = new Dictionary<long, IReadOnlyList<SemanticDictionaryCandidate>>();
+        _latestConversionResults = [];
+        var conversionSelection = ConversionRuleSelector.SelectRussianSize(input);
+        ConversionRuleStatus = conversionSelection.Status == ConversionRuleSelectionStatuses.NotApplicable
+            ? "当前Ozon Schema没有需要自动选择的俄罗斯尺码规则。"
+            : conversionSelection.IsSelected
+                ? $"已识别转换规则 {conversionSelection.RuleSetId}；运行引擎后执行转换与Ozon字典校验。"
+                : $"转换规则待确认：{conversionSelection.Reason}";
+
+        foreach (var fact in input.Source.Facts) FieldMatchingFacts.Add(fact);
+        foreach (var media in input.Source.Media) FieldMatchingMedia.Add(media);
+        foreach (var evidence in input.Source.PriceEvidence) FieldMatchingPriceEvidence.Add(evidence);
+        foreach (var evidence in input.Source.SkuEvidence) FieldMatchingSkuEvidence.Add(evidence);
+        foreach (var target in input.Target.Attributes) FieldMatchingTargets.Add(target);
+
+        FieldMatchingInputJson = JsonSerializer.Serialize(input, BridgeJson.IndentedOptions);
+        var targetText = input.Target.Attributes.Count == 0
+            ? "尚未读取 Ozon Schema"
+            : $"Ozon 目标字段 {input.Target.Attributes.Count} 项（必填 {input.Target.Attributes.Count(item => item.IsRequired)}）";
+        FieldMatchingStatus =
+            $"商品 #{input.ProductRef.ItemPosition} · {input.Source.Facts.Count} 条属性事实 · " +
+            $"{input.Source.Media.Count} 张图片 · {input.Source.PriceEvidence.Count} 条价格证据 · " +
+            $"{input.Source.SkuEvidence.Count} 条 SKU 证据 · " +
+            $"{input.Source.SkuCombinations.Count} 个已观察组合（{input.Source.SkuMatrixStatus}）；{targetText}。";
+        RefreshFieldMatchingEnginePlan();
+    }
+
+    private void RefreshFieldMatchingEnginePlan()
+    {
+        if (_latestFieldMatchingInput is null || _latestCoverageReport is null)
+        {
+            FieldMatchingEngineAttributes.Clear();
+            FieldMatchingPlanJson = "字段匹配输入和Ozon Schema就绪后生成通用匹配引擎计划。";
+            return;
+        }
+
+        var plan = FieldMatchingEnginePlanBuilder.Create(
+            _latestFieldMatchingInput,
+            _latestCoverageReport,
+            _latestDictionaryCandidates);
+        PublishFieldMatchingPlan(plan);
+    }
+
+    private void PublishFieldMatchingPlan(FieldMatchingEnginePlan plan)
+    {
+        _latestFieldMatchingPlan = plan;
+        FieldMatchingEngineAttributes.Clear();
+        foreach (var attribute in plan.Attributes)
+        {
+            FieldMatchingEngineAttributes.Add(attribute);
+        }
+
+        FieldMatchingPlanJson = JsonSerializer.Serialize(plan, BridgeJson.IndentedOptions);
+        RefreshFieldMatchingFinalOutput();
+    }
+
+    private void RefreshFieldMatchingFinalOutput()
+    {
+        FieldMatchingFinalMappings.Clear();
+        if (_latestFieldMatchingInput is null || _latestFieldMatchingPlan is null)
+        {
+            FieldMatchingFinalOutputJson = "字段匹配输入和引擎计划就绪后生成统一最终输出。";
+            FieldMatchingFinalStatus = "等待字段匹配输入和引擎计划。";
+            return;
+        }
+
+        try
+        {
+            var output = FieldMatchingFinalOutputMerger.Merge(
+                _latestFieldMatchingInput,
+                _latestFieldMatchingPlan,
+                _latestQwenMappingResponse,
+                _latestConversionResults);
+            foreach (var mapping in output.TargetMappings)
+            {
+                FieldMatchingFinalMappings.Add(mapping);
+            }
+
+            FieldMatchingFinalOutputJson = JsonSerializer.Serialize(output, BridgeJson.IndentedOptions);
+            FieldMatchingFinalStatus =
+                $"统一输出：{output.Status}；必填已完成 " +
+                $"{output.Validation.MappedRequiredCount}/{output.Validation.RequiredAttributeCount}，" +
+                $"缺失 {output.Validation.MissingRequiredCount}，待复核 {output.Validation.ReviewRequiredCount}。";
+        }
+        catch (Exception error)
+        {
+            FieldMatchingFinalOutputJson = string.Empty;
+            FieldMatchingFinalStatus = $"统一输出合并失败：{error.Message}";
+        }
+    }
+
+    private void ClearFieldMatchingPreview(string status)
+    {
+        FieldMatchingFacts.Clear();
+        FieldMatchingMedia.Clear();
+        FieldMatchingPriceEvidence.Clear();
+        FieldMatchingSkuEvidence.Clear();
+        FieldMatchingTargets.Clear();
+        FieldMatchingEngineAttributes.Clear();
+        FieldMatchingFinalMappings.Clear();
+        _latestFieldMatchingInput = null;
+        _latestCoverageReport = null;
+        _latestFieldMatchingPlan = null;
+        _latestConversionResults = [];
+        _latestDictionaryCandidates = new Dictionary<long, IReadOnlyList<SemanticDictionaryCandidate>>();
+        FieldMatchingInputJson = "尚未生成字段匹配输入。";
+        FieldMatchingPlanJson = "尚未生成通用匹配引擎计划。";
+        FieldMatchingFinalOutputJson = "尚未生成统一最终输出。";
+        FieldMatchingFinalStatus = "等待字段匹配输入和引擎计划。";
+        ConversionRuleStatus = "等待识别可用的转换规则。";
+        FieldMatchingStatus = status;
+    }
+
+    private static DetailFactSnapshotDto? CreateDetailSnapshot(
+        DetailCollectionResultDto? detail,
+        string? fallbackCapturedAt = null) =>
+        detail is null
+            ? null
+            : new DetailFactSnapshotDto(
+                detail.FinalUrl ?? detail.DetailUrl ?? string.Empty,
+                detail.CapturedAt ?? fallbackCapturedAt ?? DateTimeOffset.UtcNow.ToString("O"),
+                detail.PageTitle,
+                detail.Facts,
+                detail.Diagnostics,
+                detail.Raw);
 
     private static int GetUnresolvedDetailUrlCount(JsonElement? diagnostics)
     {
@@ -926,6 +1367,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnOzonClientIdChanged(string value)
     {
         LoadOzonSchemaCommand.NotifyCanExecuteChanged();
+        RunQwenMappingCommand.NotifyCanExecuteChanged();
         ResolveQwenDictionariesCommand.NotifyCanExecuteChanged();
         ScheduleOzonSettingsSave();
     }
@@ -933,6 +1375,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnOzonApiKeyChanged(string value)
     {
         LoadOzonSchemaCommand.NotifyCanExecuteChanged();
+        RunQwenMappingCommand.NotifyCanExecuteChanged();
         ResolveQwenDictionariesCommand.NotifyCanExecuteChanged();
         ScheduleOzonSettingsSave();
     }
@@ -961,6 +1404,17 @@ public partial class MainViewModel : ObservableObject
         ScheduleOzonSettingsSave();
     }
 
+    partial void OnSelectedFieldMatchingDetailChanged(DetailCollectionResultDto? value)
+    {
+        _latestDetailSnapshot = CreateDetailSnapshot(value);
+        RefreshFieldMatchingInput();
+        RefreshAttributeCoverage();
+        ResetQwenMappingOutput(value is null
+            ? "请选择一个详情商品后再执行AI映射。"
+            : "字段匹配商品已切换；请基于当前商品重新执行AI映射。");
+        RefreshQwenReadinessStatus();
+    }
+
     partial void OnIsLoadingOzonSchemaChanged(bool value) => LoadOzonSchemaCommand.NotifyCanExecuteChanged();
 
     private void ResetOzonSchemaForSelection()
@@ -978,6 +1432,7 @@ public partial class MainViewModel : ObservableObject
                 ? $"已选择品类：{SelectedOzonCategory.DisplayName}；请选择商品类型。"
                 : $"已选择：{SelectedOzonCategory.DisplayName} > {SelectedOzonType.Name}；可以验证凭证并读取 Schema。";
         ResetQwenMappingOutput("Ozon品类或类型已变化，请重新读取Schema后再执行AI映射。");
+        RefreshFieldMatchingInput();
         RunQwenMappingCommand.NotifyCanExecuteChanged();
     }
 
@@ -989,7 +1444,8 @@ public partial class MainViewModel : ObservableObject
         QwenRequestJson = "尚未生成Qwen映射请求。";
         QwenRawResponseJson = "尚未调用Qwen。";
         QwenMappingStatus = status;
-        QwenDictionaryStatus = "首次映射通过校验后，可搜索 Ozon 参考值并再次复核。";
+        QwenDictionaryStatus = "引擎会先查询Ozon字典；必要时可补充字典并再次复核。";
+        RefreshFieldMatchingFinalOutput();
         RunQwenMappingCommand.NotifyCanExecuteChanged();
         ResolveQwenDictionariesCommand.NotifyCanExecuteChanged();
     }
@@ -1153,6 +1609,30 @@ public partial class MainViewModel : ObservableObject
         {
             _dispatcher.BeginInvoke(Update);
         }
+    }
+
+    private void OnSearchProgressChanged(object? sender, SearchProgressPayload progress)
+    {
+        void Update()
+        {
+            if (!IsBusy) return;
+            var stage = progress.Stage switch
+            {
+                "search_page" => "正在准备 1688 搜索页",
+                "search_page_ready" => "搜索页已就绪，正在应用筛选",
+                "list_loading" => "正在滚动加载商品列表",
+                "list_ready" => "商品列表已就绪",
+                "first_pass" => "正在串行采集详情",
+                "retry" => "正在二次采集失败详情",
+                _ => progress.Stage,
+            };
+            StatusText = $"{stage}：{progress.CompletedItems}/{progress.TotalItems}" +
+                (string.IsNullOrWhiteSpace(progress.Message) ? string.Empty : $"；{progress.Message}");
+        }
+
+        if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished) return;
+        if (_dispatcher.CheckAccess()) Update();
+        else _dispatcher.BeginInvoke(Update);
     }
 
     private static string GetConnectionText(bool connected) => connected

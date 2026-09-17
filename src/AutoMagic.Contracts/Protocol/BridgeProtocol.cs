@@ -14,6 +14,7 @@ public static class BridgeProtocol
         public const string ExtensionReady = "extension.ready";
         public const string SearchStart = "search.start";
         public const string SearchAccepted = "search.accepted";
+        public const string SearchProgress = "search.progress";
         public const string SearchCompleted = "search.completed";
         public const string SearchFailed = "search.failed";
         public const string BridgeStatus = "bridge.status";
@@ -65,6 +66,13 @@ public sealed record ExtensionReadyPayload(string ExtensionVersion);
 
 public sealed record SearchAcceptedPayload(string JobId);
 
+public sealed record SearchProgressPayload(
+    string JobId,
+    string Stage,
+    int CompletedItems,
+    int TotalItems,
+    string? Message = null);
+
 public sealed record ProductItemDto(
     string? DetailUrl,
     string ImageUrl,
@@ -97,7 +105,8 @@ public sealed record DetailCollectionResultDto(
     IReadOnlyList<string>? Warnings,
     IReadOnlyList<string>? Errors,
     JsonElement? Diagnostics = null,
-    JsonElement? Raw = null);
+    JsonElement? Raw = null,
+    string? FailureCode = null);
 
 public sealed record SearchResultPayload(
     string Keyword,

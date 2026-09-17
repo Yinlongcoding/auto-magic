@@ -8,6 +8,8 @@ public interface ISearchBridge
 
     event EventHandler<bool>? ConnectionChanged;
 
+    event EventHandler<SearchProgressPayload>? SearchProgressChanged;
+
     Task<SearchResultPayload> SearchAsync(
         string keyword,
         int maxItems,

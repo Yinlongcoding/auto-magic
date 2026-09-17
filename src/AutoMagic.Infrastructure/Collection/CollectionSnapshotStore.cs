@@ -34,9 +34,35 @@ public sealed class CollectionSnapshotStore
         return directory;
     }
 
+    public async Task<StoredCollectionSnapshot?> LoadLatestAsync(CancellationToken cancellationToken = default)
+    {
+        if (!Directory.Exists(_rootDirectory))
+        {
+            return null;
+        }
+
+        var directory = new DirectoryInfo(_rootDirectory)
+            .EnumerateDirectories("COL-*")
+            .OrderByDescending(candidate => candidate.LastWriteTimeUtc)
+            .FirstOrDefault(candidate => File.Exists(Path.Combine(candidate.FullName, "collection.json")));
+        if (directory is null)
+        {
+            return null;
+        }
+
+        await using var stream = File.OpenRead(Path.Combine(directory.FullName, "collection.json"));
+        var result = await JsonSerializer.DeserializeAsync<SearchResultPayload>(
+            stream,
+            BridgeJson.Options,
+            cancellationToken);
+        return result is null ? null : new StoredCollectionSnapshot(directory.FullName, result);
+    }
+
     private static async Task WriteJsonAsync<T>(string path, T value, JsonSerializerOptions options, CancellationToken cancellationToken)
     {
         await using var stream = File.Create(path);
         await JsonSerializer.SerializeAsync(stream, value, options, cancellationToken);
     }
 }
+
+public sealed record StoredCollectionSnapshot(string Directory, SearchResultPayload Result);

@@ -54,4 +54,43 @@ public sealed class RussianSizeRuleCatalogTests
         Assert.Equal("46", result.Options[2].Conversion.CandidateRussianValues.Single());
         Assert.Equal("48", result.Options[3].Conversion.CandidateRussianValues.Single());
     }
+
+    [Fact]
+    public void Decision_DropsUnsupportedOptionWhenKnownOptionsHaveDictionaryValues()
+    {
+        var batch = RussianSizeRuleCatalog.ConvertMany(
+            "women-upper-dress",
+            [
+                new RussianSizeSourceOption("sku-xs", "XS"),
+                new RussianSizeSourceOption("sku-s", "S"),
+                new RussianSizeSourceOption("sku-m", "M"),
+            ]);
+
+        var decision = RussianSizeConversionDecisionFactory.Create(
+            4295,
+            ["f001"],
+            batch,
+            [new SemanticDictionaryCandidate(420, "42"), new SemanticDictionaryCandidate(440, "44")],
+            true);
+
+        Assert.Equal(FieldConversionStatuses.Mapped, decision.Status);
+        Assert.Equal([420L, 440L], decision.SelectedDictionaryValueIds);
+        Assert.Equal(FieldConversionStatuses.Dropped,
+            decision.Traces.Single(trace => trace.SourceValue == "XS").Status);
+        Assert.Contains("1个无可靠目标值", decision.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Decision_DistinguishesMissingDictionaryValueFromMissingConversionRule()
+    {
+        var batch = RussianSizeRuleCatalog.ConvertMany(
+            "women-upper-dress",
+            [new RussianSizeSourceOption("sku-s", "S")]);
+
+        var decision = RussianSizeConversionDecisionFactory.Create(
+            4295, ["f001"], batch, [], true);
+
+        Assert.Equal(FieldConversionStatuses.MissingDictionaryValue, decision.Status);
+        Assert.Equal(FieldConversionStatuses.MissingDictionaryValue, Assert.Single(decision.Traces).Status);
+    }
 }

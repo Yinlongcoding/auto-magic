@@ -89,7 +89,9 @@ public sealed record SemanticTargetAttribute(
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record SemanticDictionaryCandidate(
     long ValueId,
-    [property: JsonRequired] string Value);
+    [property: JsonRequired] string Value,
+    string Info = "",
+    string Picture = "");
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record SemanticSourceFact(

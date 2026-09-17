@@ -28,4 +28,16 @@ public sealed class SemanticDictionaryCandidateResolverTests
 
         Assert.Empty(result);
     }
+
+    [Fact]
+    public void Resolve_PreservesOzonCandidateMetadataForAuditing()
+    {
+        var result = SemanticDictionaryCandidateResolver.Resolve(
+            ["氨纶"],
+            [new OzonDictionaryValue(3, "氨纶", "材料说明", "https://example.test/material.png")]);
+
+        var candidate = Assert.Single(result);
+        Assert.Equal("材料说明", candidate.Info);
+        Assert.Equal("https://example.test/material.png", candidate.Picture);
+    }
 }
