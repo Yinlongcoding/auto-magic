@@ -1,5 +1,7 @@
 # AM 字段匹配输入/输出结构
 
+> 2026-09-20：本文保留采集适配和 V1 合同背景。当前桌面 AI 入口采用 [ProductMapping V2 第一阶段合同](../ai-mapping/phase1-product-mapping.md)：全部真实 SKU、AI 主导、程序校验、只读预览；不执行下文旧规则优先流程或生成可发布结果。
+
 ## 1. 目标
 
 字段匹配模块读取采集模块已经落盘的固定输入，不重新访问 1688，也不修改原始详情 JSON。每个商品独立生成一份映射结果，供人工审阅和自动上架模块消费。
@@ -147,7 +149,7 @@ details/NNN.json
 }
 ```
 
-后续若采集器产出结构化阶梯价或真实 SKU，新增 `structuredPrices`、`structuredSkus`，原始文本仍保留用于审计。
+采集器现在会在 `skuDimensions` 与 `skuCombinations` 中保留结构化规格轴、真实组合、SKU ID、选项 ID、价格、库存、图片和证据路径；原始文本仍保留用于审计。无法确认的组合保持 `unverified`，不得用笛卡尔积补造。
 
 ### 3.4 目标属性 `target.attributes`
 
@@ -279,7 +281,7 @@ details/NNN.json
 
 ## 7. 与当前代码的关系
 
-当前 `FieldMatchingInput` 是原始详情到通用引擎的标准化输入，`FieldMatchingEnginePlan` 负责记录确定性匹配、字典查询、Qwen裁决和最终校验的阶段状态。`SemanticMappingRequest`、`SemanticMappingResponse` 和严格响应验证器只作为“Qwen 语义裁决”子步骤使用。正式字段匹配合同还需要在其外层持续补充：
+当前 `FieldMatchingInput` 是原始详情到 ProductMapping V2.1 的标准化采集输入。历史 `FieldMatchingEnginePlan`、`SemanticMappingRequest` 和 `FieldMatchingFinalOutputMerger` 已移除；新的分类规则匹配引擎将负责把品类配置、Type补丁和当前Ozon Schema编译成有效规则。正式字段匹配合同还需要在其外层持续补充：
 
 - `collectionId`、`productRef` 和商品级状态；
 - 图片、价格文本和 SKU 文本证据；
@@ -287,6 +289,6 @@ details/NNN.json
 - 确定性匹配与 Qwen 候选的决策来源；
 - 最终值、人工确认状态和上架就绪验证。
 
-Qwen或转换器的输出都不能直接作为自动上架输入。`FieldMatchingFinalOutputMerger` 按“确定性结果优先、转换结果只处理已授权转换字段、Qwen只处理AI待决字段”的顺序合并；任何阶段引用不存在的`factId`、覆盖已确定字段或选择候选范围之外的`valueId`都会拒绝合并。只有通过结构校验、证据校验、Ozon字典校验和必要人工确认后的`finalValue`才能进入下一阶段。
+Qwen输出不能直接作为自动上架输入。`ProductMappingValidator` 拒绝不存在的`factId`、Schema之外的属性和候选范围之外的`valueId`。后续Ozon字段组合引擎只接收通过结构、证据和字典约束校验的映射结果。
 
 统一输出中的`readyForNextStage`只表示目标字段匹配已经完成；它不等于可以直接上架。结构化SKU、售价、图片、库存等条件需要由自动上架阶段独立校验，因此当前`readyForListing`保持为`false`。

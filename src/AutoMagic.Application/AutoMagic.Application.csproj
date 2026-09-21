@@ -11,9 +11,9 @@
     <ProjectReference Include="..\AutoMagic.Domain\AutoMagic.Domain.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="..\..\docs\ai-mapping\qwen-system-prompt.txt"
-                      LogicalName="AutoMagic.AiMapping.qwen-system-prompt.txt" />
-    <EmbeddedResource Include="..\..\docs\ai-mapping\semantic-mapping-response.schema.json"
-                      LogicalName="AutoMagic.AiMapping.semantic-mapping-response.schema.json" />
+    <EmbeddedResource Include="..\..\docs\ai-mapping\product-mapping-v2-prompt.txt"
+                      LogicalName="AutoMagic.AiMapping.product-mapping-v2-prompt.txt" />
+    <EmbeddedResource Include="..\..\docs\ai-mapping\product-mapping-response.v2.schema.json"
+                      LogicalName="AutoMagic.AiMapping.product-mapping-response.v2.schema.json" />
   </ItemGroup>
 </Project>

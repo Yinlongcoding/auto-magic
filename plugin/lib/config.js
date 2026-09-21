@@ -42,19 +42,16 @@ export const DETAIL_FACT_OPTIONS = Object.freeze({
   domReadyTimeoutMs: 8_000,
   totalItemTimeoutMs: 30_000,
   domReadyPollDelayMs: 200,
-  lazyScrollMaxWaitMs: 12_000,
-  lazyScrollStepDelayMs: 180,
-  lazyBottomSettleMs: 600,
-  lazyReturnTopSettleMs: 200,
+  targetedScrollStepDelayMs: 180,
+  targetedReturnTopSettleMs: 200,
   maxImages: 100,
   maxPriceTexts: 30,
   maxSkuTexts: 100,
-  skuInteractionDelayMs: 140,
   betweenItemDelayMs: 1_000,
   batchSize: 10,
   batchPauseMs: 5_000,
   retryPauseMs: 5_000,
-  cacheVersion: 'v5',
+  cacheVersion: 'v11',
 });
 
 export function isAllowed1688Url(value) {

@@ -11,8 +11,7 @@ public sealed record FieldMatchingInput(
     string CollectionId,
     FieldMatchingProductRef ProductRef,
     FieldMatchingSource Source,
-    FieldMatchingTarget Target,
-    FieldMatchingRules Rules);
+    FieldMatchingTarget Target);
 
 public sealed record FieldMatchingProductRef(
     int ItemIndex,
@@ -37,20 +36,35 @@ public sealed record FieldMatchingSource(
 public sealed record FieldMatchingSkuDimension(
     string Name,
     string Source,
-    IReadOnlyList<FieldMatchingSkuOption> Options);
+    IReadOnlyList<FieldMatchingSkuOption> Options)
+{
+    public string? SourceDimensionId { get; init; }
+}
 
 public sealed record FieldMatchingSkuOption(
     string OptionKey,
     string SourceValue,
     string? NormalizedValue,
-    string Status);
+    string Status)
+{
+    public string? SourceOptionId { get; init; }
+    public string? ImageUrl { get; init; }
+}
 
 public sealed record FieldMatchingSkuCombination(
     string CombinationKey,
     string Verification,
     IReadOnlyDictionary<string, string?> Options,
     decimal? Price,
-    long? Stock);
+    long? Stock)
+{
+    public string? SkuId { get; init; }
+    public IReadOnlyDictionary<string, string?> OptionIds { get; init; } =
+        new Dictionary<string, string?>(StringComparer.Ordinal);
+    public string Availability { get; init; } = "unknown";
+    public string? ImageUrl { get; init; }
+    public string? SourcePath { get; init; }
+}
 
 public sealed record FieldMatchingSourceFact(
     string FactId,
@@ -93,16 +107,7 @@ public sealed record FieldMatchingTargetAttribute(
     bool IsCollection,
     bool IsRequired,
     int MaxValueCount,
-    long DictionaryId,
-    IReadOnlyList<SemanticDictionaryCandidate> DictionaryCandidates);
-
-public sealed record FieldMatchingRules(
-    bool PreserveSourceLanguage,
-    bool AllowSyntheticFacts,
-    bool AllowSyntheticSku,
-    bool RequireEvidenceForMappedValue,
-    string DefaultOriginCountry,
-    string CardGroupingStrategy);
+    long DictionaryId);
 
 public static partial class FieldMatchingInputBuilder
 {
@@ -126,7 +131,12 @@ public static partial class FieldMatchingInputBuilder
             $"$.facts[{index}]")).ToList();
         var titleContext = string.Join(" ", new[] { detail.ProductTitle, detail.PageTitle }
             .Where(value => !string.IsNullOrWhiteSpace(value)));
-        var facts = AddDerivedFacts(rawFacts, titleContext, ReadColorOptions(detail.Raw, rawFacts));
+        var skuDimensions = ReadSkuDimensions(detail.Raw);
+        var facts = AddDerivedFacts(
+            rawFacts,
+            titleContext,
+            ReadColorOptions(detail.Raw, rawFacts),
+            skuDimensions);
 
         var media = ReadStringArray(detail.Raw, "imageUrls")
             .Select((url, index) => new FieldMatchingMediaEvidence(
@@ -144,7 +154,6 @@ public static partial class FieldMatchingInputBuilder
             .Select((text, index) => new FieldMatchingTextEvidence(
                 $"s{index + 1:000}", text, $"$.raw.skuTexts[{index}]"))
             .ToArray();
-        var skuDimensions = ReadSkuDimensions(detail.Raw);
         var skuCombinations = ReadSkuCombinations(detail.Raw);
         var skuMatrixStatus = ReadString(detail.Raw, "skuMatrixStatus") ?? "not_collected";
 
@@ -159,8 +168,7 @@ public static partial class FieldMatchingInputBuilder
                 attribute.IsCollection,
                 attribute.IsRequired,
                 attribute.MaxValueCount,
-                attribute.DictionaryId,
-                [])).ToArray() ?? [];
+                attribute.DictionaryId)).ToArray() ?? [];
 
         return new FieldMatchingInput(
             "1.0",
@@ -190,14 +198,7 @@ public static partial class FieldMatchingInputBuilder
                 targetSchema?.TypeId,
                 string.IsNullOrWhiteSpace(categoryPath) ? null : categoryPath.Trim(),
                 categoryAndTypeConfirmedByUser,
-                targetAttributes),
-            new FieldMatchingRules(
-                true,
-                false,
-                false,
-                true,
-                "China",
-                "sourceOfferId"));
+                targetAttributes));
     }
 
     private static IReadOnlyList<string> ReadStringArray(JsonElement? raw, string propertyName)
@@ -231,17 +232,22 @@ public static partial class FieldMatchingInputBuilder
             dimensions.ValueKind != JsonValueKind.Array) return [];
 
         return dimensions.EnumerateArray().Select(dimension => new FieldMatchingSkuDimension(
-                dimension.TryGetProperty("name", out var name) ? name.GetString() ?? string.Empty : string.Empty,
-                dimension.TryGetProperty("source", out var source) ? source.GetString() ?? string.Empty : string.Empty,
+                ReadString(dimension, "name") ?? string.Empty,
+                ReadString(dimension, "source") ?? string.Empty,
                 dimension.TryGetProperty("options", out var options) && options.ValueKind == JsonValueKind.Array
                     ? options.EnumerateArray().Select(option => new FieldMatchingSkuOption(
-                        option.TryGetProperty("optionKey", out var key) ? key.GetString() ?? string.Empty : string.Empty,
-                        option.TryGetProperty("sourceValue", out var sourceValue) ? sourceValue.GetString() ?? string.Empty : string.Empty,
-                        option.TryGetProperty("normalizedValue", out var normalizedValue) && normalizedValue.ValueKind == JsonValueKind.String
-                            ? normalizedValue.GetString()
-                            : null,
-                        option.TryGetProperty("status", out var status) ? status.GetString() ?? string.Empty : string.Empty)).ToArray()
-                    : []))
+                        ReadString(option, "optionKey") ?? string.Empty,
+                        ReadString(option, "sourceValue") ?? string.Empty,
+                        ReadString(option, "normalizedValue"),
+                        ReadString(option, "status") ?? string.Empty)
+                    {
+                        SourceOptionId = ReadString(option, "sourceOptionId"),
+                        ImageUrl = ReadString(option, "imageUrl"),
+                    }).ToArray()
+                    : [])
+            {
+                SourceDimensionId = ReadString(dimension, "sourceDimensionId"),
+            })
             .Where(dimension => !string.IsNullOrWhiteSpace(dimension.Name))
             .ToArray();
     }
@@ -254,29 +260,54 @@ public static partial class FieldMatchingInputBuilder
 
         return combinations.EnumerateArray().Select(combination =>
         {
-            var options = new Dictionary<string, string?>(StringComparer.Ordinal);
-            if (combination.TryGetProperty("options", out var optionObject) &&
-                optionObject.ValueKind == JsonValueKind.Object)
-            {
-                foreach (var property in optionObject.EnumerateObject())
-                {
-                    options[property.Name] = property.Value.ValueKind == JsonValueKind.String
-                        ? property.Value.GetString()
-                        : null;
-                }
-            }
+            var options = ReadStringDictionary(combination, "options");
+            var optionIds = ReadStringDictionary(combination, "optionIds");
 
             decimal? price = combination.TryGetProperty("price", out var priceValue) &&
                              priceValue.TryGetDecimal(out var parsedPrice) ? parsedPrice : null;
             long? stock = combination.TryGetProperty("stock", out var stockValue) &&
                           stockValue.TryGetInt64(out var parsedStock) ? parsedStock : null;
             return new FieldMatchingSkuCombination(
-                combination.TryGetProperty("combinationKey", out var key) ? key.GetString() ?? string.Empty : string.Empty,
-                combination.TryGetProperty("verification", out var verification) ? verification.GetString() ?? string.Empty : string.Empty,
+                ReadString(combination, "combinationKey") ?? string.Empty,
+                ReadString(combination, "verification") ?? string.Empty,
                 options,
                 price,
-                stock);
+                stock)
+            {
+                SkuId = ReadString(combination, "skuId"),
+                OptionIds = optionIds,
+                Availability = ReadString(combination, "availability") ?? "unknown",
+                ImageUrl = ReadString(combination, "imageUrl"),
+                SourcePath = ReadString(combination, "sourcePath"),
+            };
         }).Where(combination => !string.IsNullOrWhiteSpace(combination.CombinationKey)).ToArray();
+    }
+
+    private static string? ReadString(JsonElement element, string propertyName) =>
+        element.ValueKind == JsonValueKind.Object &&
+        element.TryGetProperty(propertyName, out var property) &&
+        property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+
+    private static IReadOnlyDictionary<string, string?> ReadStringDictionary(
+        JsonElement element,
+        string propertyName)
+    {
+        var result = new Dictionary<string, string?>(StringComparer.Ordinal);
+        if (!element.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind != JsonValueKind.Object)
+        {
+            return result;
+        }
+
+        foreach (var item in property.EnumerateObject())
+        {
+            result[item.Name] = item.Value.ValueKind == JsonValueKind.String
+                ? item.Value.GetString()
+                : null;
+        }
+        return result;
     }
 
     private static bool IsTitle(string label) =>
@@ -285,7 +316,8 @@ public static partial class FieldMatchingInputBuilder
     private static IReadOnlyList<FieldMatchingSourceFact> AddDerivedFacts(
         List<FieldMatchingSourceFact> facts,
         string title,
-        IReadOnlyList<NormalizedColorOption> colorOptions)
+        IReadOnlyList<NormalizedColorOption> colorOptions,
+        IReadOnlyList<FieldMatchingSkuDimension> skuDimensions)
     {
         var nextId = facts.Count + 1;
         if (!facts.Any(fact => fact.Label.Trim() is "性别" or "适用性别" or "适用人群"))
@@ -316,30 +348,60 @@ public static partial class FieldMatchingInputBuilder
             });
         }
 
+        var sizeDimension = skuDimensions.FirstOrDefault(dimension =>
+            dimension.Name.Trim() is "尺码" or "服装尺码" or "可选尺码" or "鞋码" or "鞋子尺码");
+        if (sizeDimension is not null &&
+            !facts.Any(fact => fact.Label.Trim() is "尺码" or "服装尺码" or "可选尺码" or "鞋码" or "鞋子尺码"))
+        {
+            var values = sizeDimension.Options
+                .Select(option => option.NormalizedValue ?? option.SourceValue)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (values.Length > 0)
+            {
+                facts.Add(new FieldMatchingSourceFact(
+                    $"f{nextId++:000}", "derived", "尺码", string.Join("、", values),
+                    "structured-sku-dimension", "$.raw.skuDimensions[?(@.name=='尺码')]")
+                {
+                    DerivedFromFactIds = [],
+                });
+            }
+        }
+
         var colorFact = facts.FirstOrDefault(fact =>
             fact.Label.Trim() is "颜色" or "颜色分类" or "色彩");
-        if (colorFact is not null)
+        var structuredColors = skuDimensions.FirstOrDefault(dimension => dimension.Name.Trim() == "颜色")?
+            .Options.Select(option => new NormalizedColorOption(
+                option.SourceValue,
+                option.NormalizedValue)).ToArray() ?? [];
+        var effectiveColorOptions = colorOptions.Count > 0 ? colorOptions : structuredColors;
+        if (colorFact is not null || effectiveColorOptions.Count > 0)
         {
-            var singleUnchanged = colorOptions.Count == 1 &&
+            var singleUnchanged = effectiveColorOptions.Count == 1 &&
                                   string.Equals(
-                                      colorOptions[0].SourceValue,
-                                      colorOptions[0].NormalizedValue,
+                                      effectiveColorOptions[0].SourceValue,
+                                      effectiveColorOptions[0].NormalizedValue,
                                       StringComparison.Ordinal);
-            if (singleUnchanged) return facts;
+            if (singleUnchanged && colorFact is not null) return facts;
 
-            for (var index = 0; index < colorOptions.Count; index++)
+            for (var index = 0; index < effectiveColorOptions.Count; index++)
             {
-                var option = colorOptions[index];
+                var option = effectiveColorOptions[index];
                 var normalized = !string.IsNullOrWhiteSpace(option.NormalizedValue);
                 facts.Add(new FieldMatchingSourceFact(
                     $"f{nextId++:000}",
                     normalized ? "derived" : "unresolved",
                     normalized ? "颜色" : "未识别颜色选项",
                     normalized ? option.NormalizedValue! : option.SourceValue,
-                    normalized ? "normalization:color-options" : "normalization:color-options-unresolved",
-                    $"$.raw.colorOptions[{index}]")
+                    colorFact is null
+                        ? "structured-sku-dimension"
+                        : normalized ? "normalization:color-options" : "normalization:color-options-unresolved",
+                    colorFact is null
+                        ? $"$.raw.skuDimensions[?(@.name=='颜色')].options[{index}]"
+                        : $"$.raw.colorOptions[{index}]")
                 {
-                    DerivedFromFactIds = [colorFact.FactId],
+                    DerivedFromFactIds = colorFact is null ? [] : [colorFact.FactId],
                 });
             }
         }

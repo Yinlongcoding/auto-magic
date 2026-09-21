@@ -1,0 +1,45 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["requestId", "productMappings", "variants", "warnings"],
+  "properties": {
+    "requestId": { "type": "string" },
+    "productMappings": { "type": "array", "items": { "$ref": "#/$defs/mapping" } },
+    "variants": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["variantKey", "mappings"],
+        "properties": {
+          "variantKey": { "type": "string" },
+          "mappings": { "type": "array", "items": { "$ref": "#/$defs/mapping" } }
+        }
+      }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "mapping": {
+      "type": "object", "additionalProperties": false,
+      "required": ["attributeId", "complexInstanceKey", "status", "values", "evidenceFactIds", "reason"],
+      "properties": {
+        "attributeId": { "type": "integer" },
+        "complexInstanceKey": { "type": ["string", "null"] },
+        "status": { "type": "string", "enum": ["suggested", "dictionary_pending", "missing_evidence", "ambiguous", "conversion_required", "policy_required"] },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["text", "dictionaryValueId"],
+            "properties": {
+              "text": { "type": "string" },
+              "dictionaryValueId": { "type": ["integer", "null"] }
+            }
+          }
+        },
+        "evidenceFactIds": { "type": "array", "items": { "type": "string" } },
+        "reason": { "type": "string" }
+      }
+    }
+  }
+}

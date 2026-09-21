@@ -57,9 +57,6 @@ public sealed class FieldMatchingInputBuilderTests
         Assert.Single(input.Source.Media);
         Assert.Single(input.Target.Attributes);
         Assert.True(input.Target.CategoryAndTypeConfirmedByUser);
-        Assert.False(input.Rules.AllowSyntheticSku);
-        Assert.Equal("China", input.Rules.DefaultOriginCountry);
-        Assert.Equal("sourceOfferId", input.Rules.CardGroupingStrategy);
     }
 
     [Fact]
@@ -138,8 +135,9 @@ public sealed class FieldMatchingInputBuilderTests
                 new
                 {
                     name = "颜色",
-                    source = "attribute:颜色",
-                    options = new[] { new { optionKey = "color:1", sourceValue = "1白色", normalizedValue = "白色", status = "normalized" } },
+                    source = "structured-json:window.__INIT_DATA__",
+                    sourceDimensionId = "1",
+                    options = new[] { new { optionKey = "1:11", sourceOptionId = "11", sourceValue = "1白色", normalizedValue = "白色", status = "normalized", imageUrl = "https://cbu01.alicdn.com/white.jpg" } },
                 },
                 new
                 {
@@ -153,10 +151,15 @@ public sealed class FieldMatchingInputBuilderTests
                 new
                 {
                     combinationKey = "color:1|size:1",
-                    verification = "dom-interaction",
-                    options = new { color = "白色", colorSourceValue = "1白色", size = "45" },
+                    skuId = "sku-001",
+                    verification = "structured-json",
+                    options = new Dictionary<string, string> { ["颜色"] = "白色", ["尺码"] = "45" },
+                    optionIds = new Dictionary<string, string> { ["颜色"] = "11", ["尺码"] = "21" },
                     price = 65.5m,
                     stock = 12,
+                    availability = "available",
+                    imageUrl = "https://cbu01.alicdn.com/white.jpg",
+                    sourcePath = "window.__INIT_DATA__.skuCore.sku2info['1:11;2:21']",
                 },
             },
         });
@@ -168,51 +171,17 @@ public sealed class FieldMatchingInputBuilderTests
 
         Assert.Equal("verified", input.Source.SkuMatrixStatus);
         Assert.Equal(2, input.Source.SkuDimensions.Count);
+        Assert.Equal("1", input.Source.SkuDimensions[0].SourceDimensionId);
+        Assert.Equal("11", input.Source.SkuDimensions[0].Options[0].SourceOptionId);
         var combination = Assert.Single(input.Source.SkuCombinations);
-        Assert.Equal("白色", combination.Options["color"]);
-        Assert.Equal("45", combination.Options["size"]);
+        Assert.Equal("sku-001", combination.SkuId);
+        Assert.Equal("白色", combination.Options["颜色"]);
+        Assert.Equal("45", combination.Options["尺码"]);
+        Assert.Equal("11", combination.OptionIds["颜色"]);
         Assert.Equal(65.5m, combination.Price);
         Assert.Equal(12, combination.Stock);
+        Assert.Equal("available", combination.Availability);
+        Assert.Contains(input.Source.Facts, fact => fact.Label == "尺码" && fact.Source == "structured-sku-dimension");
     }
 
-    [Fact]
-    public void SemanticRequest_UsesNormalizedInputAndOnlySelectedUnresolvedAttributes()
-    {
-        var detail = new DetailCollectionResultDto(
-            0,
-            1,
-            "吊带裙",
-            "https://detail.1688.com/offer/123456.html",
-            "success",
-            "https://detail.1688.com/offer/123456.html",
-            "2026-09-17T00:00:00Z",
-            "吊带裙",
-            [new DetailFactDto("颜色", "白色", "dom-pair")],
-            [],
-            []);
-        var schema = new OzonCategorySchema(
-            10,
-            20,
-            DateTimeOffset.UtcNow,
-            [
-                new OzonAttributeDefinition(30, 0, "颜色", "", "String", false, true, 99, 1, ""),
-                new OzonAttributeDefinition(31, 0, "名称", "", "String", false, true, 0, 1, ""),
-            ]);
-        var input = FieldMatchingInputBuilder.Create(
-            "COL-1", "MAP-1", detail, schema, "服装 > 连衣裙", true);
-        IReadOnlyDictionary<long, IReadOnlyList<SemanticDictionaryCandidate>> candidates =
-            new Dictionary<long, IReadOnlyList<SemanticDictionaryCandidate>>
-            {
-                [30] = [new(9001, "白色")],
-            };
-
-        var request = SemanticMappingRequestFactory.CreateFromFieldMatchingInput(
-            "REQ-1", input, candidates, new HashSet<long> { 30 });
-
-        var target = Assert.Single(request.TargetAttributes);
-        Assert.Equal(30, target.AttributeId);
-        Assert.Equal(9001, Assert.Single(target.DictionaryCandidates).ValueId);
-        Assert.Equal("f001", Assert.Single(request.SourceFacts).FactId);
-        Assert.Empty(SemanticMappingResponseValidator.ValidateRequest(request));
-    }
 }

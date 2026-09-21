@@ -9,5 +9,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AutoMagic.Contracts.Tests/AutoMagic.Contracts.Tests.csproj" />
+    <Project Path="tests/AutoMagic.Desktop.Tests/AutoMagic.Desktop.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1,12 +1,8 @@
-namespace AutoMagic.Application.Ozon.Mapping;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Encodings.Web;
 
-public interface IQwenSemanticMappingService
-{
-    Task<QwenSemanticMappingResult> MapAsync(
-        QwenApiCredentials credentials,
-        SemanticMappingRequest request,
-        CancellationToken cancellationToken);
-}
+namespace AutoMagic.Application.Ozon.Mapping;
 
 public sealed record QwenApiCredentials(string ApiKey)
 {
@@ -26,16 +22,6 @@ public sealed record QwenApiCredentials(string ApiKey)
     }
 }
 
-public sealed record QwenSemanticMappingResult(
-    string ProviderRequestId,
-    string ModelId,
-    string SkillVersion,
-    string ContractVersion,
-    DateTimeOffset CompletedAt,
-    string RawContent,
-    QwenTokenUsage Usage,
-    SemanticMappingValidationResult Validation);
-
 public sealed record QwenTokenUsage(
     int PromptTokens,
     int CompletionTokens,
@@ -47,6 +33,23 @@ public static class QwenMappingRuntime
     public const string RegionId = "cn-beijing";
     public const string RegionDisplayName = "华北2（北京）";
     public const string ModelId = "qwen3.7-plus-2026-05-26";
-    public const string ContractVersion = "1.0";
     public const string SharedBaseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1/";
+}
+
+public static class ProductMappingJson
+{
+    public static JsonSerializerOptions StrictOptions { get; } = new(JsonSerializerDefaults.Web)
+    {
+        AllowTrailingCommas = false,
+        PropertyNameCaseInsensitive = false,
+        ReadCommentHandling = JsonCommentHandling.Disallow,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        WriteIndented = false,
+    };
+
+    public static JsonSerializerOptions IndentedOptions { get; } = new(StrictOptions)
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        WriteIndented = true,
+    };
 }

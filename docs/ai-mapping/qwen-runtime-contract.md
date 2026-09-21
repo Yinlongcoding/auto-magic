@@ -13,10 +13,10 @@
 
 ## 模型调用边界
 
-- 使用 `qwen-system-prompt.txt` 作为系统约束，使用符合输入合同的详情事实JSON作为用户数据。
+- 使用 `product-mapping-v2-prompt.txt` 作为系统约束，使用符合 ProductMapping V2.1 合同的详情事实JSON作为用户数据。
 - 关闭联网、工具调用和外部知识检索，防止模型引入当前商品事实之外的信息。
-- 使用模型支持的最低随机性；请求结构化JSON输出，并以 `semantic-mapping-response.schema.json` 作为公开结构合同。
-- 本地 `SemanticMappingResponseValidator` 在严格JSON反序列化之后继续校验JSON Schema无法表达的跨字段规则，包括目标属性顺序、证据原文、未映射事实补集、状态依赖和字典ID白名单。
+- 使用模型支持的最低随机性；请求结构化JSON输出，并以 `product-mapping-response.v2.schema.json` 作为公开结构合同。
+- 本地 `ProductMappingValidator` 在严格JSON反序列化之后继续校验JSON Schema无法表达的跨字段规则，包括SKU完整性、证据作用范围、状态依赖、属性白名单和字典ID白名单。
 - 模型响应不是最终Ozon发布参数。字典解析、转换规则、业务策略和最终编译必须由本地确定性代码完成。
 - 任何未通过本地Schema和证据一致性校验的响应都不得写入品类映射方案库。
 
@@ -36,11 +36,13 @@
 
 ## 当前桌面端调用流程
 
-1. 用户在应用中选定Ozon品类和类型并读取动态Schema。
-2. Chrome插件采集列表第2条商品的1688详情事实。
-3. 用户在“AI 语义映射”页签录入DashScope API Key；密钥只保存到Windows Credential Manager。
-4. 用户主动点击“执行AI映射”，应用才会调用百炼并产生Token费用。
-5. 应用使用固定快照模型、非思考模式和严格JSON Schema发送请求，不启用联网或工具调用。
-6. 模型原始响应先经过本地结构与证据一致性校验。失败结果只展示错误，不写入映射方案库。
-7. 首次校验通过后，用户可点击“读取字典并复核”。应用按 `dictionary_pending` 映射的文本候选读取 Ozon 字典分页结果，本地只保留精确归一化命中的真实 `valueId`，再发起一次带白名单候选的 Qwen 复核。
-8. 字典复核仍不是最终发布参数；俄罗斯尺码转换和“合并至一张卡片”等外部规则/运营策略必须由本地确定性代码和用户确认完成，映射方案持久化仍属于后续阶段。
+2026-09-20 起使用 ProductMapping V2，完整边界见 [第一阶段说明](phase1-product-mapping.md)。历史 SemanticMapping V1 合同和运行服务已移除。
+
+1. 用户在“Ozon Schema”页录入 Ozon 和 Qwen 凭证，选定品类/类型并读取动态 Schema。
+2. 在“字段匹配”选定已采集的一个商品；也可使用启动时恢复的最近采集批次。
+3. 用户点击“运行 AI 映射”才调用百炼。首轮使用原始文本事实、全部已确认真实 SKU 和全部目标属性定义，不执行旧规则或默认值。
+4. 使用 product-mapping-v2-prompt.txt、product-mapping-response.v2.schema.json 和 ProductMappingResponse 合同；保留固定模型、严格 JSON 输出及关闭联网/工具调用的设置。
+5. 先校验首轮响应，再针对 dictionary_pending 的文本查询 Ozon；取得真实候选时才执行第二轮，最多两轮。第二轮失败保留首轮建议及未解决状态。
+6. Qwen 使用独立的紧凑传输合同。内部 sourcePath、批次、商品标识、指纹、商家 SKU、源 SKU 和组合键不发送；`eN/vN` 只用于把响应机械还原到本地事实和变体，不作为语义上下文。两轮调用属于同一模型的建议与字典细化，不构成独立 AI 交叉验证。
+6. ProductMappingValidator 检查证据作用范围、属性及字典、类型、多值、复杂组和逐 SKU 必填覆盖。合同合法不等于语义正确。
+7. 结果只读展示，支持取消并废弃旧上下文的晚到响应；不处理图片、价格库存、规则学习或上架提交。

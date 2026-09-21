@@ -10,8 +10,8 @@
   const DEFAULT_MAX_SKU_TEXTS = 100;
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.type === 'PREPARE_1688_RENDERED_DETAIL') {
-      void prepareLazyContent(message.options).then(
+    if (message?.type === 'PREPARE_1688_TARGETED_DETAIL') {
+      void prepareTargetedContent(message.options).then(
         (data) => sendResponse({ success: true, data }),
         (error) => sendResponse({ success: false, error: error.message }),
       );
@@ -49,9 +49,12 @@
     collectCpvAttributes(candidates);
     if (!candidates.length) collectSemanticPairs(candidates);
 
-    const attributes = normalizeCandidates(candidates, maxFacts);
-    const colorOptions = collectNormalizedColorOptions(attributes);
-    const skuCapture = await collectStructuredSkuCapture(attributes, colorOptions, options);
+    const filterMatrixFacts = globalThis.__AUTO_MAGIC_DETAIL_FACT_FILTER__?.filterMatrixFacts;
+    const attributes = normalizeCandidates(
+      typeof filterMatrixFacts === 'function' ? filterMatrixFacts(candidates) : candidates,
+      maxFacts,
+    );
+    const skuCapture = collectStructuredSkuCapture(options);
     const title = normalizeProductTitle(document.title);
     const facts = normalizeCandidates([
       ...(title ? [{ label: '商品名称', value: title, source: 'document.title' }] : []),
@@ -75,18 +78,15 @@
     );
     const sourceCounts = countSources(attributes);
 
-    const lazyLoad = globalThis.__AUTO_MAGIC_DETAIL_LAZY_STATE__ ?? null;
+    const targetedPreparation = globalThis.__AUTO_MAGIC_DETAIL_TARGETED_STATE__ ?? null;
     return {
-      ready: !blocked && lazyLoad?.completed === true,
+      ready: !blocked,
       finalUrl: location.href,
       capturedAt: new Date().toISOString(),
       pageTitle: document.title || null,
       facts,
       raw: {
         offerId: extractOfferId(location.href),
-        title,
-        attributes,
-        colorOptions,
         skuDimensions: skuCapture.dimensions,
         skuCombinations: skuCapture.combinations,
         skuMatrixStatus: skuCapture.status,
@@ -111,57 +111,51 @@
           normalAttributes: document.querySelectorAll('.normal-attributes-table tbody tr').length,
           cpvAttributes: document.querySelectorAll('.cpv-attr-item').length,
         },
-        lazyLoad,
+        acquisition: {
+          mode: targetedPreparation ? 'targeted-retry' : 'initial-dom',
+          fullPageScrolled: false,
+          targetedPreparation,
+        },
       },
     };
   }
 
-  async function prepareLazyContent(options = {}) {
-    const maxWaitMs = normalizeLimit(options.maxWaitMs, 1_000, 60_000, 12_000);
+  async function prepareTargetedContent(options = {}) {
     const stepDelayMs = normalizeLimit(options.stepDelayMs, 50, 2_000, 180);
-    const bottomSettleMs = normalizeLimit(options.bottomSettleMs, 100, 3_000, 600);
     const returnTopSettleMs = normalizeLimit(options.returnTopSettleMs, 50, 2_000, 200);
     const startedAt = Date.now();
     const initialHeight = getDocumentHeight();
-    let scrollSteps = 0;
-    let bottomChecks = 0;
-    let reachedBottom = false;
-
     if (isBlockedPage()) throw new Error('1688详情页触发了验证码或访问限制。');
-    window.scrollTo({ top: 0, behavior: 'instant' });
-    while (Date.now() - startedAt < maxWaitMs) {
-      if (isBlockedPage()) throw new Error('1688详情页触发了验证码或访问限制。');
-      const height = getDocumentHeight();
-      const viewportHeight = Math.max(window.innerHeight, 600);
-      const nextTop = Math.min(window.scrollY + Math.floor(viewportHeight * 0.85), height);
-      window.scrollTo({ top: nextTop, behavior: 'instant' });
-      scrollSteps += 1;
-      await delay(stepDelayMs);
-      const currentHeight = getDocumentHeight();
-      reachedBottom = window.scrollY + window.innerHeight >= currentHeight - 8;
-      if (!reachedBottom) continue;
-
-      bottomChecks += 1;
-      await delay(bottomSettleMs);
-      const settledHeight = getDocumentHeight();
-      const stillAtBottom = window.scrollY + window.innerHeight >= settledHeight - 8;
-      if (stillAtBottom && settledHeight === currentHeight) break;
+    const selectors = [];
+    if (options.needSku) {
+      selectors.push(
+        '[class*="sku"]', '[class*="Sku"]', '[class*="spec"]', '[class*="Spec"]',
+      );
     }
-
+    if (options.needAttributes) {
+      selectors.push('.decision-attributes-list', '.normal-attributes-table', '.cpv-attr-item');
+    }
+    const targets = [...new Set(selectors
+      .map((selector) => document.querySelector(selector))
+      .filter(Boolean))];
+    for (const target of targets) {
+      if (isBlockedPage()) throw new Error('1688详情页触发了验证码或访问限制。');
+      target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+      await delay(stepDelayMs);
+    }
     window.scrollTo({ top: 0, behavior: 'instant' });
     await delay(returnTopSettleMs);
     const state = {
       completed: true,
-      reachedBottom,
-      timedOut: !reachedBottom,
       elapsedMs: Date.now() - startedAt,
-      scrollSteps,
-      bottomChecks,
+      requestedSku: Boolean(options.needSku),
+      requestedAttributes: Boolean(options.needAttributes),
+      targetCount: targets.length,
       initialHeight,
       finalHeight: getDocumentHeight(),
-      signature: readLazySignature(),
+      signature: readPageSignature(),
     };
-    globalThis.__AUTO_MAGIC_DETAIL_LAZY_STATE__ = state;
+    globalThis.__AUTO_MAGIC_DETAIL_TARGETED_STATE__ = state;
     return state;
   }
 
@@ -179,7 +173,7 @@
     );
   }
 
-  function readLazySignature() {
+  function readPageSignature() {
     return [
       document.querySelectorAll('img').length,
       document.querySelectorAll('[data-src], [data-lazy-src], [data-original]').length,
@@ -237,6 +231,7 @@
       if (row.closest('.normal-attributes-table')) continue;
       collectTableRowPairs(row, candidates, 'semantic-table');
     }
+
   }
 
   function collectTableRowPairs(row, candidates, source) {
@@ -343,145 +338,128 @@
     };
   }
 
-  function collectNormalizedColorOptions(attributes) {
-    const normalizeColorOptions = globalThis.__AUTO_MAGIC_DETAIL_NORMALIZERS__?.normalizeColorOptions;
-    if (typeof normalizeColorOptions !== 'function') return [];
-    return attributes
-      .filter((attribute) => /^(?:颜色|颜色分类|色彩)$/u.test(cleanText(attribute.label)))
-      .flatMap((attribute) => normalizeColorOptions(attribute.value));
-  }
-
-  async function collectStructuredSkuCapture(attributes, colorOptions, options) {
-    const normalizeSimpleOptions = globalThis.__AUTO_MAGIC_DETAIL_NORMALIZERS__?.normalizeSimpleOptions;
-    const sizeAttribute = attributes.find((attribute) =>
-      /^(?:尺码|服装尺码|可选尺码|鞋码|鞋子尺码)$/u.test(cleanText(attribute.label)));
-    const sizeValues = typeof normalizeSimpleOptions === 'function'
-      ? normalizeSimpleOptions(sizeAttribute?.value)
-      : [];
-    const dimensions = [];
-    if (colorOptions.length > 0) {
-      dimensions.push({
-        name: '颜色',
-        source: 'attribute:颜色',
-        options: colorOptions.map((option, index) => ({
-          optionKey: `color:${index + 1}`,
-          sourceValue: option.sourceValue,
-          normalizedValue: option.normalizedValue,
-          status: option.status,
-        })),
-      });
-    }
-    if (sizeValues.length > 0) {
-      dimensions.push({
-        name: '尺码',
-        source: `attribute:${sizeAttribute.label}`,
-        options: sizeValues.map((value, index) => ({
-          optionKey: `size:${index + 1}`,
-          sourceValue: value,
-          normalizedValue: value,
-          status: 'normalized',
-        })),
-      });
-    }
-
-    if (colorOptions.length === 0 || sizeValues.length === 0) {
+  function collectStructuredSkuCapture(options) {
+    const structured = normalizeStructuredSkuCapture(options.structuredSkuCapture);
+    if (structured.combinations.length > 0) {
+      const expectedDimensions = structured.dimensions.map((dimension) => dimension.name);
+      const accepted = [];
+      const excluded = [];
+      for (const combination of structured.combinations) {
+        const optionNames = Object.keys(combination.options);
+        const structureComplete = optionNames.length > 0
+          && optionNames.length === new Set(optionNames).size
+          && expectedDimensions.every((name) => optionNames.includes(name));
+        if (structureComplete) accepted.push(combination);
+        else excluded.push({
+          combinationKey: combination.combinationKey,
+          sourceSkuId: combination.skuId,
+          reason: '规格组合结构不完整或缺少规格轴。',
+        });
+      }
+      const status = accepted.length === structured.combinations.length
+        ? 'verified'
+        : accepted.length > 0 ? 'partially_verified' : 'invalid_structure';
       return {
-        status: 'dimensions_only',
-        dimensions,
-        combinations: [],
+        status,
+        dimensions: structured.dimensions,
+        combinations: accepted,
         diagnostics: {
-          status: 'dimensions_only',
-          reason: '页面没有同时提供颜色轴和尺码轴。',
-          colorCount: colorOptions.length,
-          sizeCount: sizeValues.length,
-          verifiedColorCount: 0,
-          combinationCount: 0,
+          ...structured.diagnostics,
+          status,
+          strategy: 'structured-json',
+          reason: excluded.length === 0
+            ? '已从页面上下文结构化数据还原真实SKU组合。'
+            : '只保留来源可追溯且规格结构完整的真实SKU组合。',
+          dimensionCount: structured.dimensions.length,
+          observedCombinationCount: structured.combinations.length,
+          combinationCount: accepted.length,
+          excludedCombinationCount: excluded.length,
+          excludedCombinations: excluded,
         },
       };
     }
-
-    const delayMs = normalizeLimit(options.skuInteractionDelayMs, 50, 1_000, 140);
-    const combinations = [];
-    let verifiedColorCount = 0;
-    for (const [colorIndex, color] of colorOptions.entries()) {
-      const colorElement = findSkuOptionElement([color.sourceValue, color.normalizedValue]);
-      if (!colorElement || isUnavailableSkuOption(colorElement)) continue;
-      clickSkuOption(colorElement);
-      await delay(delayMs);
-      verifiedColorCount += 1;
-
-      for (const [sizeIndex, size] of sizeValues.entries()) {
-        const sizeElement = findSkuOptionElement([size]);
-        if (!sizeElement || isUnavailableSkuOption(sizeElement)) continue;
-        const rowText = cleanText(findSkuOptionContainer(sizeElement)?.textContent);
-        const stockMatch = rowText.match(/库存\s*(\d+)\s*(?:件|个)?/u);
-        const priceMatch = rowText.match(/[¥￥]\s*(\d+(?:\.\d+)?)/u);
-        combinations.push({
-          combinationKey: `color:${colorIndex + 1}|size:${sizeIndex + 1}`,
-          verification: 'dom-interaction',
-          options: {
-            color: color.normalizedValue,
-            colorSourceValue: color.sourceValue,
-            size,
-          },
-          stock: stockMatch ? Number(stockMatch[1]) : null,
-          price: priceMatch ? Number(priceMatch[1]) : null,
-        });
-      }
-    }
-
-    const status = verifiedColorCount === colorOptions.length && combinations.length > 0
-      ? 'verified'
-      : combinations.length > 0
-        ? 'partially_verified'
-        : 'unverified';
+    const status = structured.dimensions.length > 0 ? 'dimensions_only' : 'unverified';
     return {
       status,
-      dimensions,
-      combinations,
+      dimensions: structured.dimensions,
+      combinations: [],
       diagnostics: {
         status,
-        reason: combinations.length > 0
-          ? '逐个选择颜色后读取当前可用尺码；未凭空补全组合。'
-          : '未能从当前页面DOM确认颜色与尺码组合。',
-        colorCount: colorOptions.length,
-        sizeCount: sizeValues.length,
-        verifiedColorCount,
-        combinationCount: combinations.length,
+        strategy: 'dimension-evidence-only',
+        structuredProbe: structured.diagnostics,
+        reason: '结构化页面数据未提供可追溯的真实SKU组合。',
+        dimensionCount: structured.dimensions.length,
+        combinationCount: 0,
       },
     };
   }
 
-  function findSkuOptionElement(values) {
-    const wanted = values.filter(Boolean).map((value) => cleanText(value));
-    if (wanted.length === 0) return null;
-    const selectors = [
-      'button', '[role="button"]', '[role="option"]',
-      '[class*="sku"]', '[class*="Sku"]', '[class*="prop"]', '[class*="Prop"]',
-    ].join(',');
-    return Array.from(document.querySelectorAll(selectors))
-      .filter((element) => isElementVisible(element) && wanted.includes(cleanText(element.textContent)))
-      .sort((left, right) => left.children.length - right.children.length)[0] ?? null;
+  function normalizeStructuredSkuCapture(capture) {
+    const diagnostics = capture?.diagnostics && typeof capture.diagnostics === 'object'
+      ? capture.diagnostics
+      : { strategy: 'page-context-structured-data', reason: '没有结构化SKU探针结果。' };
+    const dimensions = Array.isArray(capture?.dimensions)
+      ? capture.dimensions.map((dimension) => {
+          const name = cleanText(dimension?.name);
+          const options = Array.isArray(dimension?.options)
+            ? dimension.options.map((option, index) => {
+                const sourceValue = cleanText(option?.sourceValue);
+                return {
+                  optionKey: cleanText(option?.optionKey) || `${name}:${index + 1}`,
+                  sourceOptionId: cleanText(option?.sourceOptionId) || null,
+                  sourceValue,
+                  normalizedValue: sourceValue,
+                  status: 'observed',
+                  imageUrl: cleanText(option?.imageUrl) || null,
+                };
+              }).filter((option) => option.sourceValue)
+            : [];
+          return {
+            name,
+            source: cleanText(dimension?.source) || 'structured-json',
+            sourceDimensionId: cleanText(dimension?.sourceDimensionId) || null,
+            options,
+          };
+        }).filter((dimension) => dimension.name && dimension.options.length > 0)
+      : [];
+    const combinations = Array.isArray(capture?.combinations)
+      ? capture.combinations.map((combination, index) => {
+          const capturedOptions = combination?.options && typeof combination.options === 'object'
+            ? Object.fromEntries(Object.entries(combination.options)
+                .map(([name, value]) => [cleanText(name), cleanText(value)])
+                .filter(([name, value]) => name && value))
+            : {};
+          const optionIds = combination?.optionIds && typeof combination.optionIds === 'object'
+            ? Object.fromEntries(Object.entries(combination.optionIds)
+                .map(([name, value]) => [cleanText(name), cleanText(value)])
+                .filter(([name, value]) => name && value))
+            : {};
+          return {
+            skuId: cleanText(combination?.skuId) || null,
+            combinationKey: cleanText(combination?.combinationKey) || `structured:${index + 1}`,
+            verification: 'structured-json',
+            options: capturedOptions,
+            optionIds,
+            price: optionalNumber(combination?.price),
+            stock: optionalInteger(combination?.stock),
+            availability: cleanText(combination?.availability) || 'unknown',
+            imageUrl: cleanText(combination?.imageUrl) || null,
+            sourcePath: cleanText(combination?.sourcePath) || null,
+          };
+        }).filter((combination) => Object.keys(combination.options).length > 0)
+      : [];
+    return { dimensions, combinations, diagnostics };
   }
 
-  function findSkuOptionContainer(element) {
-    return element.closest(
-      '.sku-item-wrapper, .sku-list-item, .expand-view-item, tr, [class*="sku-item"], [class*="SkuItem"]',
-    ) || element;
+  function optionalNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
   }
 
-  function isUnavailableSkuOption(element) {
-    const control = element.closest('button, [role="button"], [role="option"]') || element;
-    const classText = `${control.className ?? ''} ${findSkuOptionContainer(control).className ?? ''}`;
-    return Boolean(control.disabled)
-      || control.getAttribute('aria-disabled') === 'true'
-      || /(?:^|[-_\s])(disabled|disable|soldout|sold-out|unavailable)(?:$|[-_\s])/i.test(classText);
-  }
-
-  function clickSkuOption(element) {
-    const control = element.closest('button, [role="button"], [role="option"]') || element;
-    control.scrollIntoView?.({ block: 'center', inline: 'center' });
-    control.click();
+  function optionalInteger(value) {
+    const number = optionalNumber(value);
+    return Number.isInteger(number) ? number : null;
   }
 
   function readElementImageUrls(element) {

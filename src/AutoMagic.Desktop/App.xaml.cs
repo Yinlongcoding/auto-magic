@@ -55,12 +55,15 @@ public partial class App : System.Windows.Application
             client.Timeout = TimeSpan.FromSeconds(60);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("AutoMagic/0.2");
         }).RedactLoggedHeaders(_ => true);
-        builder.Services.AddHttpClient<IQwenSemanticMappingService, QwenSemanticMappingService>(client =>
+        builder.Services.AddHttpClient<IProductSemanticMapper, QwenProductSemanticMapper>(client =>
         {
             client.BaseAddress = new Uri(QwenMappingRuntime.SharedBaseUrl);
-            client.Timeout = TimeSpan.FromSeconds(90);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("AutoMagic/0.3");
+            client.Timeout = TimeSpan.FromSeconds(120);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("AutoMagic/0.4");
         }).RedactLoggedHeaders(_ => true);
+        builder.Services.AddSingleton(CategoryRuleCatalog.Empty);
+        builder.Services.AddSingleton<CategoryRuleMatchingEngine>();
+        builder.Services.AddTransient<ProductMappingRunner>();
         builder.Services.AddSingleton<ILocalOzonCategoryCatalog>(_ =>
             new LocalOzonCategoryCatalog(
                 Path.Combine(AppContext.BaseDirectory, "Data", "ozon-category-tree.test.json")));

@@ -20,7 +20,7 @@
 | 职责 | AM 文件 | 责任 |
 | --- | --- | --- |
 | 列表页采集 | `plugin/content/extractor.js` | 读取搜索结果卡片，提取标题、价格、图片和详情链接，按原始顺序输出列表 JSON |
-| 详情页事实采集 | `plugin/content/detail-extractor.js`、`plugin/lib/detail-facts.js` | 在真实渲染的 1688 详情页中读取页面事实、图片、属性和 SKU |
+| 详情页事实采集 | `plugin/content/detail-extractor.js`、`plugin/lib/structured-sku-reader.js` | 在真实渲染的 1688 详情页中读取页面事实、图片、属性和结构化 SKU |
 | 任务编排与页面控制 | `plugin/background.js` | 打开/复用搜索页，应用筛选排序，滚动加载列表，逐条打开详情页并隔离单商品异常 |
 | 扩展弹窗 | `plugin/popup.js`、`plugin/popup.html` | 显示任务进度、列表数量、成功/部分成功/失败数量和采集警告 |
 | 桌面端请求入口 | `src/AutoMagic.Infrastructure/Bridge/DesktopBridgeService.cs`、`src/AutoMagic.Contracts/Protocol/BridgeProtocol.cs` | 接收桌面端采集任务并把最终结果返回桌面端 |
@@ -75,6 +75,8 @@ created → searching → list_ready → collecting_details → completed
 ```text
 打开详情页
 → 等待页面完成和关键区域渲染
+→ 直接读取当前 DOM 与结构化 SKU
+→ 属性或 SKU 组合缺失时定向滚动对应区域并重试
 → 采集详情事实
 → 关闭临时标签页
 → 写入该商品结果
@@ -131,14 +133,18 @@ failed   页面无法访问或没有取得可用详情事实
 
 商品级事实和 SKU 级事实必须区分；同一字段的多个 SKU 值不能压缩成一个商品级值。
 
+第一阶段不滚动到详情页底部。`facts` 是唯一的规范属性集合；`raw` 不重复保存标题、属性和颜色派生列表，只保留结构化 SKU、图库和兼容审计文本。完整诊断属于采集证据，不作为字段匹配事实。
+
 ## 6. SKU 采集策略
 
 SKU 采集按以下优先级取得证据：
 
-1. 页面初始化脚本或结构化商品数据中的真实 SKU ID、规格组合、价格、库存和图片。
+1. 页面初始化脚本或结构化商品数据中的真实 SKU ID、规格组合、价格、库存和图片。探针覆盖常见全局状态、动态命名的商品/SKU 状态、React 节点状态、`data-*` JSON、`JSON.parse(...)` 初始化内容及 `skuBase.skus + skuCore` 关联结构。
 2. 页面可见的 SKU 组合控件和规格属性，用于补充结构化数据缺失的组合信息。
-3. 单规格商品没有组合表时，生成明确标记为 `single_specification` 的单规格记录；这不是伪造 1688 SKU ID。
+3. 单规格商品没有结构化组合证据时只保留已采集到的规格维度或文本证据，当前阶段不生成兜底 SKU。
 4. 只有名称或页面文字、没有规格组合证据的内容，不得当作 SKU。
+
+页面存在 SKU 证据但定向重试后仍没有真实组合时，详情必须标记为 `partial`，不能以 `success` 掩盖 SKU 缺失。
 
 每个 SKU 至少保留：
 
@@ -166,7 +172,7 @@ SKU 图片缺失不阻塞商品采集；必须保留 `sku_image_missing=true`。
 
 图片分为主图、详情图和 SKU/规格图。采集器应先读取真实 URL，再由下载层处理本地保存、去重和失败记录。每张图片保留原始 URL、来源类别、顺序、下载状态和错误信息。
 
-图片懒加载处理顺序为：读取 `currentSrc/src`，再读取 `data-src`、`data-original`、`srcset` 和背景图；必要时滚动图片区域触发加载。无法读取的图片只产生告警，不影响其他字段和其他商品。
+图片懒加载处理顺序为：读取 `currentSrc/src`，再读取 `data-src`、`data-original`、`srcset` 和背景图。第一阶段只读取当前图库，不为详情图片滚动到底部；后续图片阶段可单独启用详情图片区域加载。无法读取的图片只产生告警，不影响其他字段和其他商品。
 
 ## 8. 原始快照与诊断
 

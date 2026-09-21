@@ -1377,22 +1377,38 @@ async function captureRenderedDetail(job, item, itemIndex, existingTabId = null)
       await waitForDetailDomReady(tabId, item.detailUrl, remainingTimeout(deadline, DETAIL_FACT_OPTIONS.domReadyTimeoutMs));
       await chrome.scripting.executeScript({
         target: { tabId },
-        files: ['lib/detail-normalizers.js', 'content/detail-extractor.js'],
+        files: ['lib/detail-fact-filter.js', 'content/detail-extractor.js'],
       });
-      const preparation = await chrome.tabs.sendMessage(tabId, {
-        type: 'PREPARE_1688_RENDERED_DETAIL',
-        options: {
-          maxWaitMs: Math.min(DETAIL_FACT_OPTIONS.lazyScrollMaxWaitMs, remainingTimeout(deadline)),
-          stepDelayMs: DETAIL_FACT_OPTIONS.lazyScrollStepDelayMs,
-          bottomSettleMs: DETAIL_FACT_OPTIONS.lazyBottomSettleMs,
-          returnTopSettleMs: DETAIL_FACT_OPTIONS.lazyReturnTopSettleMs,
-        },
-      });
-      if (!preparation?.success) throw new Error(preparation?.error || '详情页懒加载准备失败。');
-      const extraction = await extractRenderedDetailOnce(tabId);
+      let extraction = await extractRenderedDetailOnce(tabId);
+      const needAttributes = Number(extraction.diagnostics?.attributeCount ?? 0) === 0;
+      const dimensions = extraction.raw?.skuDimensions ?? [];
+      const combinations = extraction.raw?.skuCombinations ?? [];
+      const hasSkuEvidence = dimensions.length > 0 ||
+        Number(extraction.diagnostics?.skuTextCount ?? 0) > 0;
+      const needSku = hasSkuEvidence && combinations.length === 0;
+      if (needAttributes || needSku) {
+        const preparation = await chrome.tabs.sendMessage(tabId, {
+          type: 'PREPARE_1688_TARGETED_DETAIL',
+          options: {
+            needAttributes,
+            needSku,
+            stepDelayMs: DETAIL_FACT_OPTIONS.targetedScrollStepDelayMs,
+            returnTopSettleMs: DETAIL_FACT_OPTIONS.targetedReturnTopSettleMs,
+          },
+        });
+        if (!preparation?.success) throw new Error(preparation?.error || '详情页定向准备失败。');
+        extraction = await extractRenderedDetailOnce(tabId);
+      }
       const facts = extraction.facts ?? [];
       const hasAttributes = Number(extraction.diagnostics?.attributeCount ?? 0) > 0;
-      return { tabId, result: { ...base, status: hasAttributes ? 'success' : 'partial', finalUrl: extraction.finalUrl, capturedAt: extraction.capturedAt, pageTitle: extraction.pageTitle, facts, diagnostics: extraction.diagnostics ?? null, raw: extraction.raw ?? null, warnings: hasAttributes ? [] : ['详情页已加载完成，但未采集到商品属性。'], errors: [] } };
+      const finalDimensions = extraction.raw?.skuDimensions ?? [];
+      const finalCombinations = extraction.raw?.skuCombinations ?? [];
+      const unresolvedSkuEvidence = (finalDimensions.length > 0 ||
+        Number(extraction.diagnostics?.skuTextCount ?? 0) > 0) && finalCombinations.length === 0;
+      const warnings = [];
+      if (!hasAttributes) warnings.push('详情页已加载完成，但未采集到商品属性。');
+      if (unresolvedSkuEvidence) warnings.push('页面存在SKU证据，但未取得可追溯的真实SKU组合。');
+      return { tabId, result: { ...base, status: hasAttributes && !unresolvedSkuEvidence ? 'success' : 'partial', finalUrl: extraction.finalUrl, capturedAt: extraction.capturedAt, pageTitle: extraction.pageTitle, facts, diagnostics: extraction.diagnostics ?? null, raw: extraction.raw ?? null, warnings, errors: [] } };
     } catch (error) {
       const failureCode = classifyDetailFailure(error);
       if (failureCode === 'tab_lost' && tabAttempt === 0) {
@@ -1488,6 +1504,7 @@ async function writeDetailCache(cache) {
 }
 
 async function extractRenderedDetailOnce(tabId) {
+  const structuredSkuCapture = await captureStructuredSkuFromPage(tabId);
   const response = await chrome.tabs.sendMessage(tabId, {
     type: 'EXTRACT_1688_RENDERED_DETAIL',
     options: {
@@ -1495,14 +1512,48 @@ async function extractRenderedDetailOnce(tabId) {
       maxImages: DETAIL_FACT_OPTIONS.maxImages,
       maxPriceTexts: DETAIL_FACT_OPTIONS.maxPriceTexts,
       maxSkuTexts: DETAIL_FACT_OPTIONS.maxSkuTexts,
-      skuInteractionDelayMs: DETAIL_FACT_OPTIONS.skuInteractionDelayMs,
+      structuredSkuCapture,
     },
   });
   if (!response?.success) throw new Error(response?.error || '详情页解析器没有返回有效结果。');
   const diagnostics = response.data?.diagnostics ?? null;
   if (diagnostics?.blocked) throw new Error('1688详情页触发了验证码或访问限制。');
-  if (!response.data?.ready) throw new Error('详情页懒加载流程未完成。');
+  if (!response.data?.ready) throw new Error('详情页读取未完成。');
   return { ...response.data, diagnostics: { ...diagnostics, attempts: 1, waitMs: 0 } };
+}
+
+async function captureStructuredSkuFromPage(tabId) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      files: ['lib/structured-sku-reader.js'],
+    });
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: () => globalThis.__AUTO_MAGIC_STRUCTURED_SKU_READER__?.capture(
+        document,
+        globalThis,
+      ) ?? null,
+    });
+    return result ?? {
+      status: 'not_found',
+      dimensions: [],
+      combinations: [],
+      diagnostics: { strategy: 'page-context-structured-data', reason: '探针没有返回结果。' },
+    };
+  } catch (error) {
+    return {
+      status: 'probe_failed',
+      dimensions: [],
+      combinations: [],
+      diagnostics: {
+        strategy: 'page-context-structured-data',
+        reason: String(error?.message ?? error ?? '结构化SKU探针执行失败。'),
+      },
+    };
+  }
 }
 
 async function waitForDetailDomReady(tabId, expectedUrl, timeoutMs) {
