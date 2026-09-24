@@ -1,5 +1,7 @@
 # Qwen 映射运行合同
 
+> 2026-09-24 需求变更：正式匹配已改为确定性规则；无法解析的字段/valueId 留空待人工填写或校验，禁止 AI/Qwen 补齐。桌面新增“运行规则匹配”，原 AI 输入预览只作本地诊断。下文的两轮 AI 运行描述属于历史设计。当前学习现状、实现边界与新规划见 `docs/field-matching/manual-review-learning-plan.md`。
+
 ## 已冻结配置
 
 - 服务商：阿里云百炼（DashScope）

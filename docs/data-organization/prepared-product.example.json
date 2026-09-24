@@ -1,0 +1,196 @@
+{
+  "contractVersion": "am-prepared-product-example-v0",
+  "sample": {
+    "isExcerpt": true,
+    "sourceFactCount": 44,
+    "shownSourceFactCount": 6,
+    "variantCount": 84,
+    "shownVariantCount": 2
+  },
+  "sourceProduct": {
+    "platform": "1688",
+    "offerId": "1069577638062",
+    "title": "法式立体花朵灯笼袖棉麻连衣裙 圆领单排扣宽松遮肉度假短裙YJ190",
+    "detailUrl": "https://detail.1688.com/offer/1069577638062.html",
+    "capturedAt": "2026-09-22T02:19:41.210Z",
+    "captureStatus": "partial"
+  },
+  "sourceFactsExcerpt": [
+    {
+      "factId": "f001",
+      "scope": "product",
+      "label": "商品名称",
+      "rawValue": "法式立体花朵灯笼袖棉麻连衣裙 圆领单排扣宽松遮肉度假短裙YJ190",
+      "sourcePath": "$.facts[0]"
+    },
+    {
+      "factId": "f005",
+      "scope": "product",
+      "label": "品牌",
+      "rawValue": "其他",
+      "sourcePath": "$.facts[4]"
+    },
+    {
+      "factId": "f014",
+      "scope": "product",
+      "label": "袖长",
+      "rawValue": "长袖",
+      "sourcePath": "$.facts[13]"
+    },
+    {
+      "factId": "f019",
+      "scope": "product",
+      "label": "颜色",
+      "rawValue": "粉红色,藏青色,绿色,棕色,杏色,米白,黑色,薄荷绿,深红色,灰色,蓝色,桃色",
+      "sourcePath": "$.facts[18]"
+    },
+    {
+      "factId": "f020",
+      "scope": "product",
+      "label": "尺码",
+      "rawValue": "XS,S,M,L,XL,XXL,3XL",
+      "sourcePath": "$.facts[19]"
+    },
+    {
+      "factId": "f035",
+      "scope": "product",
+      "label": "适用人群",
+      "rawValue": "通用",
+      "sourcePath": "$.facts[34]"
+    }
+  ],
+  "specificationAxes": [
+    {
+      "axisId": "color",
+      "sourceLabel": "颜色",
+      "sourcePath": "$.raw.skuDimensions[0]",
+      "optionCount": 12,
+      "shownOptions": [
+        { "optionKey": "1:1", "rawValue": "粉红色", "sourceOptionId": null },
+        { "optionKey": "1:12", "rawValue": "桃色", "sourceOptionId": null }
+      ]
+    },
+    {
+      "axisId": "size",
+      "sourceLabel": "尺码",
+      "sourcePath": "$.raw.skuDimensions[1]",
+      "optionCount": 7,
+      "shownOptions": [
+        { "optionKey": "2:1", "rawValue": "XS", "sourceOptionId": null },
+        { "optionKey": "2:7", "rawValue": "3XL", "sourceOptionId": null }
+      ]
+    }
+  ],
+  "skuMatrix": {
+    "formation": "dimension_cartesian",
+    "variantCount": 84,
+    "decodedSourceCombinationCount": 0,
+    "variantsExcerpt": [
+      {
+        "variantKey": "axes:1:1|2:1",
+        "sourceSkuId": null,
+        "combinationStatus": "derived_from_axes",
+        "options": {
+          "颜色": { "rawValue": "粉红色", "optionKey": "1:1" },
+          "尺码": { "rawValue": "XS", "optionKey": "2:1" }
+        },
+        "price": { "amount": null, "currency": "CNY" },
+        "stock": null,
+        "availability": "unknown"
+      },
+      {
+        "variantKey": "axes:1:12|2:7",
+        "sourceSkuId": null,
+        "combinationStatus": "derived_from_axes",
+        "options": {
+          "颜色": { "rawValue": "桃色", "optionKey": "1:12" },
+          "尺码": { "rawValue": "3XL", "optionKey": "2:7" }
+        },
+        "price": { "amount": null, "currency": "CNY" },
+        "stock": null,
+        "availability": "unknown"
+      }
+    ]
+  },
+  "ozonTarget": {
+    "descriptionCategoryId": 200000933,
+    "typeId": 93211,
+    "categoryPath": "服装 > 服装 > 无袖连衣裙"
+  },
+  "requiredCoverage": [
+    {
+      "attributeId": 10096,
+      "name": "商品颜色",
+      "scope": "variant",
+      "exampleVariantKey": "axes:1:1|2:1",
+      "sourceValue": "粉红色",
+      "sourceReferences": ["color:1:1"],
+      "sourceState": "present",
+      "nextStep": "dictionary_lookup",
+      "resolvedValue": null
+    },
+    {
+      "attributeId": 4295,
+      "name": "俄罗斯尺码",
+      "scope": "variant",
+      "exampleVariantKey": "axes:1:1|2:1",
+      "sourceValue": "XS",
+      "sourceReferences": ["size:2:1"],
+      "sourceState": "present",
+      "nextStep": "conversion_and_dictionary_lookup",
+      "resolvedValue": null
+    },
+    {
+      "attributeId": 9163,
+      "name": "性别",
+      "scope": "product",
+      "sourceValue": null,
+      "sourceReferences": ["f001", "f035"],
+      "sourceState": "insufficient_explicit_evidence",
+      "nextStep": "manual_review",
+      "resolvedValue": null
+    },
+    {
+      "attributeId": 31,
+      "name": "服装和鞋类品牌",
+      "scope": "product",
+      "sourceValue": "其他",
+      "sourceReferences": ["f005"],
+      "sourceState": "ambiguous",
+      "nextStep": "confirm_brand_or_no_brand",
+      "resolvedValue": null
+    },
+    {
+      "attributeId": 8229,
+      "name": "类型",
+      "scope": "product",
+      "sourceValue": "连衣裙",
+      "sourceReferences": ["f001", "f014"],
+      "sourceState": "target_type_conflict",
+      "nextStep": "confirm_source_sleeve_or_reselect_ozon_type",
+      "resolvedValue": null
+    },
+    {
+      "attributeId": 8292,
+      "name": "合并至一张卡片",
+      "scope": "product",
+      "sourceValue": null,
+      "sourceReferences": [],
+      "sourceState": "policy_required",
+      "nextStep": "set_grouping_policy",
+      "resolvedValue": null
+    }
+  ],
+  "blockingIssues": [
+    {
+      "code": "target_type_conflict",
+      "targetType": "无袖连衣裙",
+      "observedFact": "袖长：长袖",
+      "sourceReferences": ["f014"]
+    },
+    {
+      "code": "variant_availability_unknown",
+      "message": "84 个组合由规格轴推导，逐组合价格、库存和可售性尚未确认。"
+    }
+  ]
+}

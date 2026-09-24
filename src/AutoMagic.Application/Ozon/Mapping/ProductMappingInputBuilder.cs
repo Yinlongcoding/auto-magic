@@ -43,6 +43,9 @@ public static class ProductMappingInputBuilder
         issues.AddRange(FindCategoryCompatibilityIssues(input.Target.CategoryPath, facts));
 
         var combinations = input.Source.SkuCombinations;
+        if (combinations.Any(sku => sku.Verification == "dimension-cartesian"))
+            issues.Add(new("warning", "sku.dimension_cartesian", ProductScope, null,
+                "SKU 由页面规格轴笛卡尔积枚举；组合选项可用于映射，但逐组合库存、价格和可售性尚未确认。"));
         var repeatedKeys = combinations.GroupBy(s => s.CombinationKey, StringComparer.Ordinal)
             .Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.Ordinal);
         var repeatedIds = combinations.Where(s => !string.IsNullOrWhiteSpace(s.SkuId))
@@ -64,7 +67,7 @@ public static class ProductMappingInputBuilder
         {
             var sku = combinations[index];
             var options = observedOptions[index];
-            var confirmed = sku.Verification is "structured-json" or "dom-interaction" or "verified";
+            var confirmed = sku.Verification is "structured-json" or "dom-interaction" or "verified" or "dimension-cartesian";
             var validOptions = options.Count > 0 && options.All(option =>
                 !string.IsNullOrWhiteSpace(option.Name) && !string.IsNullOrWhiteSpace(option.Value)) &&
                 options.Select(o => o.Name).Distinct(StringComparer.Ordinal).Count() == options.Count &&
@@ -106,7 +109,8 @@ public static class ProductMappingInputBuilder
             {
                 var factId = $"sku:{index + 1}:option:{++optionIndex}";
                 ids.Add(factId);
-                facts.Add(new(factId, key, option.Name, option.Value!, "verified-sku-option",
+                facts.Add(new(factId, key, option.Name, option.Value!,
+                    sku.Verification == "dimension-cartesian" ? "dimension-cartesian-option" : "verified-sku-option",
                     $"$.raw.skuCombinations[{index}].options[{JsonSerializer.Serialize(option.SourceKey)}]"));
             }
             // Zero stock does not make a real SKU imaginary; inventory decisions are outside phase 1.

@@ -1,28 +1,30 @@
 # Auto Magic 项目交接文档
 
-> 交接日期：2026-09-21
+> 2026-09-24 需求变更：正式匹配已改为确定性规则；无法解析的字段/valueId 留空待人工填写或校验，禁止 AI/Qwen 补齐。桌面新增“运行规则匹配”，原 AI 输入预览只作本地诊断。下文的两轮 AI 运行描述属于历史设计。当前学习现状、实现边界与新规划见 `docs/field-matching/manual-review-learning-plan.md`。
+
+> 交接日期：2026-09-22
 >
 > 工作目录：`D:\ys-project\auto-magic`
 >
 > 支持平台：Windows 10/11 x64
 >
-> Chrome 插件版本：`0.1.22`
-> 当前阶段：第一阶段映射预览、分类规则框架和 Ozon 属性组合草稿已经可运行；正式上架尚未开放
+> Chrome 插件版本：`0.1.23`
+> 当前阶段：AI 调用已暂停；字段匹配页展示数据清洗和模型输入 JSON 供审核，正式上架尚未开放
 
 ## 1. 当前目标与边界
 
 ```text
 桌面端输入商品关键词并选择 Ozon description_category_id/type_id
 → Chrome 插件复用当前 1688 登录会话获取商品列表
-→ 按列表顺序串行采集详情事实、图片证据和真实 SKU
+→ 按列表顺序串行采集详情事实、图片证据和 SKU 组合
 → 读取所选 Ozon 类型的动态 Schema
 → 分类规则优先、AI 补缺，形成可审计的属性建议
 → 本地校验事实引用、字典、类型、基数、必填项和 SKU 作用域
-→ 每个真实 SKU 组合为一个 Ozon items[] 草稿
+→ 每个 SKU 组合为一个 Ozon items[] 属性草稿
 → 后续补齐商业字段后批量提交并读取上架结果
 ```
 
-当前只实现到“可审阅的 Ozon 属性组合草稿”。图片处理、最终价格库存、重量尺寸、税率、商品创建/更新 API 和上架结果读取尚未实现。`ReadyForListing` 与 `ReadyForSubmit` 必须保持 false，不能把预览结果直接提交 Ozon。
+当前桌面入口已暂停 AI 调用，只生成可审阅的模型输入 JSON；原有映射引擎代码仍在仓库，但界面不调用。图片处理、最终价格库存、重量尺寸、税率、商品创建/更新 API 和上架结果读取尚未实现。`ReadyForListing` 与 `ReadyForSubmit` 必须保持 false，不能把预览结果直接提交 Ozon。
 
 Ozon 品类和类型由用户选择，AI 不负责猜测品类。程序会对少量高置信度冲突进行前置阻断，例如所选类型为“无袖连衣裙”、源事实却是“袖长：长袖”。
 
@@ -35,10 +37,10 @@ Ozon 品类和类型由用户选择，AI 不负责猜测品类。程序会对少
 当前最新桌面构建：
 
 ```text
-artifacts/desktop-phase1-v2/AutoMagic.Desktop.exe
+artifacts/desktop-phase1-v4/AutoMagic.Desktop.exe
 ```
 
-旧的 `artifacts/desktop-phase1/AutoMagic.Desktop.exe` 在最后一次发布时被正在运行的旧进程占用，因此最新构建输出到了 `desktop-phase1-v2`。
+旧的 `artifacts/desktop-phase1/AutoMagic.Desktop.exe` 曾被运行中的进程占用；当前包含数据清洗预览的构建输出到了 `desktop-phase1-v4`。
 
 ## 3. 技术基线
 
@@ -48,7 +50,7 @@ artifacts/desktop-phase1-v2/AutoMagic.Desktop.exe
 - Chrome Native Messaging → `AutoMagic.NativeHost` → 当前用户 Named Pipe → WPF。
 - Ozon 和百炼密钥保存在 Windows Credential Manager，不进入插件、Native Host、日志或 Git。
 - Ozon Schema 和字典由桌面端直连官方 Seller API。
-- Qwen 使用 DashScope OpenAI 兼容接口、严格 JSON Schema、非思考模式和固定低随机性。
+- Qwen 适配器代码使用 DashScope OpenAI 兼容接口、严格 JSON Schema、非思考模式和固定低随机性；当前桌面入口已暂停调用。
 - 当前为轻量分层单体；SQLite、规则 revision、云端同步和 Velopack 尚未接入。
 
 ## 4. 关键文件
@@ -61,7 +63,8 @@ plugin/background.js                          搜索、标签页、详情串行�
 
 src/AutoMagic.Application/Ozon/Mapping/
   ProductMappingContracts.cs                  ProductMapping V2.1 合同
-  ProductMappingInputBuilder.cs               原始事实、真实 SKU 和目标 Schema 输入构造
+  ProductMappingInputBuilder.cs               原始事实、SKU 组合和目标 Schema 输入构造
+  CleanedProductBuilder.cs                     与 Schema 无关的采集数据清洗预览
   QwenProductMappingTransport.cs              模型侧压缩合同与 eN/vN 别名恢复
   ProductMappingRunner.cs                     规则优先、AI、字典查询和最多两轮调用
   ProductMappingResponseNormalizer.cs         仅机械归一化，不判断商品语义
@@ -76,6 +79,7 @@ src/AutoMagic.Infrastructure/Ozon/Mapping/
 docs/ai-mapping/phase1-product-mapping.md      第一阶段行为与边界
 docs/category-rules/README.md                  分类规则分层与学习流程
 docs/collector/am-collector-logic.md           采集器事实来源
+docs/data-organization/cleaned-product.md      数据清洗 JSON 合同与示例
 ```
 
 ## 5. 已完成的清理
@@ -89,7 +93,7 @@ docs/collector/am-collector-logic.md           采集器事实来源
 - `ConversionRuleSelector`；
 - 旧 Qwen V1 界面页签和对应测试；
 - 服装专用颜色/尺码归一化模块；
-- 颜色×尺码 DOM 笛卡尔式后备逻辑。
+- 旧的基于 DOM 点击、无法追溯规格来源的颜色×尺码后备逻辑。
 
 可复用的 Qwen 运行参数和 JSON 配置已迁移到 `AiMappingRuntime.cs`。当前有效入口是 ProductMapping V2.1，不要重新引用已删除的 V1 类。
 
@@ -103,15 +107,15 @@ docs/collector/am-collector-logic.md           采集器事实来源
 - 同时只使用一个共享详情标签页。
 - 首次读取当前 DOM；属性或 SKU 不完整时只滚动目标区域，不做全页滚动。
 - 单商品总预算 30 秒；失败进入二次采集队列。
-- 详情缓存键为 `offerId + cacheVersion`，当前缓存版本为 `v11`。
+- 详情缓存键为 `offerId + cacheVersion`，当前缓存版本为 `v12`。
 
 ### SKU 原则
 
-- 只接受页面真实结构化数据中存在的组合；
+- 优先接受页面结构化数据中明确存在的组合；若只有完整规格轴，则枚举笛卡尔积并标记 `dimension-cartesian`；
 - 保留 `9号`、`均码`、`大码`、`36键` 等原始值；
 - 真实但库存为零的 SKU 保留为 `stock: 0 / unavailable`；
-- 不构造页面没有提供的笛卡尔积；
-- 有 SKU 文本或规格轴、但没有真实组合时，详情状态为 `partial`。
+- 有明确的稀疏组合时不补造缺失组合；规格轴推导组合的逐项价格、库存和可售性仍是未知；
+- 仅有规格轴推导组合或没有可用组合时，详情状态为 `partial`。
 
 SKU 探针目前覆盖：常见和动态命名的页面全局商品状态、React 节点状态、`data-*` JSON、静态 JSON、`JSON.parse(...)` 初始化内容、`skuBase + skuCore` 及 `skuProps + skuInfoMap` 等结构。诊断会输出 `inspectedRootPaths`、`selectedSourcePath`、`selectedShape`、维度数和组合数。
 
@@ -131,11 +135,11 @@ SKU 探针目前覆盖：常见和动态命名的页面全局商品状态、Reac
 
 ## 7. ProductMapping V2.1
 
-内部请求保留请求身份、采集批次、商品身份、品类/type、原始事实和路径、真实 SKU、稳定 `variantKey/merchantSku` 及完整 Schema。
+内部请求保留请求身份、采集批次、商品身份、品类/type、原始事实和路径、SKU 组合、稳定 `variantKey/merchantSku` 及完整 Schema。规格轴推导组合带 `sku.dimension_cartesian` 警告。
 
 模型只接收压缩合同：品类、`字段：值`事实、逐变体事实、目标属性和字典候选。证据使用短别名 `eN`，变体使用 `vN`。模型若只改变别名大小写，例如把 `e5` 返回成 `E5`，程序会在唯一匹配时机械恢复；未知别名仍按 `evidence.fabricated` 拒绝。
 
-第一轮 AI 为必填属性返回建议或明确未解决状态。字典字段第一轮只提供查询文本，程序随后调用 Ozon 字典搜索；取得真实候选时最多追加一次 AI 调用。第二轮只能选择程序提供的 ID/文本组合。
+原有运行链路设计为：第一轮 AI 为必填属性返回建议或明确未解决状态；字典字段第一轮只提供查询文本，程序随后调用 Ozon 字典搜索；取得真实候选时最多追加一次 AI 调用。**当前桌面入口不会进入该链路，也不会查询本轮映射字典。**
 
 验证器检查请求身份、属性 ID、证据与 SKU 作用域、SKU 集合、字典候选、数据类型、基数、复杂属性实例和逐 SKU 必填覆盖。AI 输出不能直接成为 Ozon 请求。
 
@@ -155,7 +159,7 @@ SKU 探针目前覆盖：常见和动态命名的页面全局商品状态、Reac
 
 ## 9. Ozon 字段组合引擎
 
-- 一个真实 1688 SKU 生成一个 Ozon `items[]` 元素；
+- 一个已记录的 SKU 组合生成一个 Ozon `items[]` 属性草稿；规格轴推导组合仍需在正式提交前确认逐项可售性；
 - 商品公共属性复制到每个 item；
 - SKU 映射覆盖同属性/复杂实例键的公共值；
 - 复杂属性按 `complexInstanceKey` 分组；
@@ -175,17 +179,21 @@ SKU 探针目前覆盖：常见和动态命名的页面全局商品状态、Reac
 
 该样本的材质数据本身冲突，适合作为 `ambiguous` 回归样本，不应学习成材质规则。
 
+2026-09-22 复测 offer `834198976463` 时，页面给出 17 个颜色选项和 4 个尺码选项，但结构化 SKU 行无法解码，旧版因此生成 0 个变体。插件 `0.1.23` 在这种情况下生成 68 个标记为 `dimension-cartesian` 的待核实组合；逐组合价格、库存、可售性不作推断。用户要求暂停所有 AI 调用，先审查数据组织和模型输入 JSON，桌面按钮已改为本地预览。
+
+首轮使用新组合时发现桌面解析 `price: null`、`stock: null` 会抛出 JSON 类型错误；已在 `FieldMatchingInputContracts.cs` 中要求值为 Number 才执行数值转换，缺失值继续保留 `null`。`desktop-phase1-v3` 已重新发布，合同测试新增相应回归样本。
+
 ## 11. 界面查看方式
 
-在“Ozon Schema”选择类型并读取 Schema，完成新版采集后，到“字段匹配”选择商品并运行 AI。重点查看：
+完成新版采集后，到“字段匹配”选择商品；“数据清洗 JSON”会立即更新，无需先读取 Ozon Schema。需要检查后续模型输入时，再在“Ozon Schema”选择类型并读取 Schema，点击“生成 AI 输入 JSON”；界面会自动切换到“AI 输入 JSON（预览）”。这些操作都不调用 Qwen，也不需要百炼 API Key。
 
-- AI 映射建议；
 - SKU 身份计划；
 - 校验与未解决问题；
 - 源商品事实；
-- AI 输入 JSON；
-- AI 原始响应；
-- 引擎结果 JSON。
+- 数据清洗 JSON（原始确认事实、待确认候选、规格组合及其验证来源）；
+- AI 输入 JSON（预览）。
+
+“AI 映射建议”“AI 原始响应”“引擎结果 JSON”在暂停期间不生成新的结果；后续只有用户明确恢复 AI 调用后才能重新启用。
 
 “引擎结果 JSON”包含：
 
@@ -218,11 +226,11 @@ $testFiles = Get-ChildItem -LiteralPath 'test' -Filter '*.test.mjs' |
 node --test $testFiles
 ```
 
-2026-09-21 最近基线：
+2026-09-22 最近基线：
 
-- `AutoMagic.Contracts.Tests`：82 通过；
-- `AutoMagic.Desktop.Tests`：8 通过；
-- Chrome 插件 Node 测试：32 通过；
+- `AutoMagic.Contracts.Tests`：86 通过（含数据清洗确认/待确认划分与规格组合测试）；
+- `AutoMagic.Desktop.Tests`：4 通过；
+- Chrome 插件 Node 测试：33 通过；
 - JavaScript 语法检查通过；
 - `git diff --check` 无内容错误，只有 Windows 行尾提示；
 - `win-x64` self-contained 发布成功。
@@ -234,7 +242,7 @@ dotnet publish src/AutoMagic.Desktop/AutoMagic.Desktop.csproj `
   --configuration Release `
   --runtime win-x64 `
   --self-contained true `
-  --output artifacts/desktop-phase1-v2 `
+  --output artifacts/desktop-phase1-v4 `
   -p:PublishSingleFile=true `
   -p:IncludeNativeLibrariesForSelfExtract=true
 ```
@@ -250,7 +258,7 @@ dotnet publish src/AutoMagic.Desktop/AutoMagic.Desktop.csproj `
    .\scripts\register-native-host.ps1 -ExtensionId <扩展ID>
    ```
 
-5. 重新加载扩展，确认版本为 `0.1.22`。
+5. 重新加载扩展，确认版本为 `0.1.23`。
 6. 先启动桌面端，再执行搜索采集。
 7. 重新录入 Ozon Client ID、Ozon API Key 和百炼 API Key。
 
@@ -258,13 +266,11 @@ dotnet publish src/AutoMagic.Desktop/AutoMagic.Desktop.csproj `
 
 ### P0：真实复测本轮采集修复
 
-1. 重新加载插件 `0.1.22`；缓存 `v11` 会避开旧结果。
-2. 用 offer `1069577638062` 或同类商品重新采集。
-3. 确认重量矩阵污染消失。
-4. 检查 `raw.skuDimensions`、`raw.skuCombinations` 和 `diagnostics.skuMatrix`。
-5. 若仍无组合，保存 `inspectedRootPaths`、`selectedSourcePath`、`selectedShape` 和新源 JSON，为真实页面增加结构适配；不要改成笛卡尔积。
-6. 选择与长袖事实一致的 Ozon 类型，再运行 AI。
-7. 确认不再出现仅由 `E5/e5` 造成的 `evidence.fabricated`，并验证字典第二轮是否触发。
+1. 重新加载插件 `0.1.23`；缓存 `v12` 会避开旧结果。
+2. 用 offer `834198976463` 重新采集，检查 `raw.skuDimensions`、`raw.skuCombinations` 和 `diagnostics.skuMatrix`；预期为 17×4=68 个 `dimension-cartesian` 组合，详情状态仍为 `partial`。
+3. 选择对应 Ozon 类型，在字段匹配页点击“生成 AI 输入 JSON”，检查商品事实、逐 SKU 事实、目标属性及短别名关联。**不要恢复 AI 调用，直到用户明确授权。**
+4. 若仍无组合，保存 `inspectedRootPaths`、`selectedSourcePath`、`selectedShape` 和新源 JSON，检查结构适配或组合数量上限。
+5. 用 offer `1069577638062` 或同类商品复核重量矩阵过滤与类型冲突阻断；只做本地数据检查。
 
 ### P1：规则学习闭环
 
@@ -297,7 +303,7 @@ dotnet publish src/AutoMagic.Desktop/AutoMagic.Desktop.csproj `
 - 不把 AI 输出直接提交 Ozon。
 - 不允许模型编造字典 ID、事实、尺码换算或运营策略。
 - 不使用全品类全局硬编码俄罗斯尺码规则。
-- 不按颜色、尺码或其他规格轴构造未经页面确认的笛卡尔积。
+- 规格轴笛卡尔积必须保留 `dimension-cartesian` 来源标记，不得伪造 SKU ID、逐项库存、价格或可售性；若页面提供明确稀疏组合，以明确组合为准。
 - 不因为规格值是“9号、均码、大码、36键”就从采集层删除。
 - 不把“其他”自动解释为“无品牌”。
 - 不把商品级事实错误应用到 SKU，或把一个 SKU 的事实串到另一个 SKU。
@@ -308,9 +314,9 @@ dotnet publish src/AutoMagic.Desktop/AutoMagic.Desktop.csproj `
 ## 17. 接手验收清单
 
 - 仓库可以构建并通过 .NET 与 Node 测试；
-- 插件显示 `0.1.22`，Native Host 与桌面端连接正常；
+- 插件显示 `0.1.23`，Native Host 与桌面端连接正常；
 - 1688 搜索可以得到列表并串行采集前 10 条详情；
-- 无真实 SKU 组合时结果为 `partial`，不会伪造 SKU；
+- 只有规格轴推导组合时结果为 `partial`，可进入属性映射但不能把未知库存当成有货；
 - Ozon Schema 能按所选品类/type 读取；
 - 类型明显冲突时 AI 不会被调用；
 - 正常样本能获得严格 Qwen 响应并通过或明确失败于本地验证；

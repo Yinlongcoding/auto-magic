@@ -5,6 +5,7 @@ namespace AutoMagic.Application.Ozon.Mapping;
 // Phase 1 is a preview contract. Neither the model nor this pipeline can publish.
 public static class ProductMappingStatuses
 {
+    public const string ManualRequired = "manual_required";
     public const string Suggested = "suggested";
     public const string DictionaryPending = "dictionary_pending";
     public const string MissingEvidence = "missing_evidence";
@@ -13,7 +14,7 @@ public static class ProductMappingStatuses
     public const string PolicyRequired = "policy_required";
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
-        Suggested, DictionaryPending, MissingEvidence, Ambiguous, ConversionRequired, PolicyRequired,
+        Suggested, DictionaryPending, MissingEvidence, Ambiguous, ConversionRequired, PolicyRequired, ManualRequired,
     };
 }
 

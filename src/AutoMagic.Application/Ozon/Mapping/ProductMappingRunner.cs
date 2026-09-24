@@ -1,121 +1,125 @@
 namespace AutoMagic.Application.Ozon.Mapping;
 
-/// <summary>Rules-first preview: deterministic category rules win, then AI fills gaps in at most two passes.</summary>
+/// <summary>Deterministic mappings only. Unresolved values remain blank for human review.</summary>
 public sealed class ProductMappingRunner
 {
-    private readonly IProductSemanticMapper _mapper;
     private readonly IOzonDictionaryService _dictionaries;
     private readonly CategoryRuleMatchingEngine _rules;
 
+    // Retained for source compatibility; the semantic mapper is deliberately never used.
     public ProductMappingRunner(IProductSemanticMapper mapper, IOzonDictionaryService dictionaries)
         : this(mapper, dictionaries, new CategoryRuleMatchingEngine(CategoryRuleCatalog.Empty)) { }
 
     public ProductMappingRunner(IProductSemanticMapper mapper, IOzonDictionaryService dictionaries,
         CategoryRuleMatchingEngine rules)
     {
-        _mapper = mapper;
         _dictionaries = dictionaries;
         _rules = rules;
     }
 
-    public async Task<ProductMappingRun> RunAsync(ProductMappingInput input,
+    public Task<ProductMappingRun> RunAsync(ProductMappingInput input,
         QwenApiCredentials aiCredentials, OzonTemporaryCredentials ozonCredentials,
-        IProgress<string>? progress, CancellationToken cancellationToken)
+        IProgress<string>? progress, CancellationToken cancellationToken) =>
+        RunAsync(input, ozonCredentials, progress, cancellationToken);
+
+    public async Task<ProductMappingRun> RunAsync(ProductMappingInput input,
+        OzonTemporaryCredentials ozonCredentials, IProgress<string>? progress, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var request = input.Request;
-        var ruleMatch = _rules.Match(request);
+        if (input.SourceIssues.Any(issue => issue.Severity == "error"))
+            return new(request, null, new(false, 0, input.SourceIssues, []), []);
+        var match = _rules.Match(request);
         var issues = new List<ProductMappingIssue>(input.SourceIssues);
-        issues.AddRange(ruleMatch.Gaps.Select(gap => new ProductMappingIssue("warning", gap.Code,
+        issues.AddRange(match.Gaps.Select(gap => new ProductMappingIssue("warning", gap.Code,
             gap.ScopeKey, gap.AttributeId, gap.Message)));
-        var calls = new List<ProductMappingCallResult>();
-        cancellationToken.ThrowIfCancellationRequested();
-        if (issues.Any(issue => issue.Severity == "error"))
-            return new(request, null, new(false, 0, issues, []), calls);
-        progress?.Report($"AI 正在为商品及 {request.Skus.Count} 个真实 SKU 提出属性建议…");
-        var first = await _mapper.MapAsync(aiCredentials, request, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        calls.Add(first);
-        issues.AddRange(first.ParseIssues);
-        if (first.Response is null)
-        {
-            var missing = ProductMappingValidator.Validate(request, null, issues);
-            return new(request, null, missing, calls);
-        }
-        var normalizedFirst = ProductMappingResponseNormalizer.Normalize(request, first.Response);
-        issues.AddRange(normalizedFirst.Issues);
-        var firstResponse = ruleMatch.MergeWith(normalizedFirst.Response);
-        var validation = ProductMappingValidator.Validate(request, firstResponse, issues);
-        if (firstResponse.RequestId != request.RequestId)
-            return new(request, firstResponse, validation, calls);
+        progress?.Report("正在执行确定性规则；无法确定的字段留空，等待人工填写/校验。");
+        var candidates = request.Attributes.ToDictionary(a => a.AttributeId,
+            a => a.DictionaryCandidates.ToList());
+        var cache = new Dictionary<(long, string), ProductDictionaryCandidate[]>();
 
-        // Valid mappings may still provide safe lookup text even when an unrelated row is invalid.
-        // Per-item evidence checks prevent an invalid envelope from driving dictionary calls.
-        var pending = ProductMappingResponseNormalizer.SafeDictionaryQueries(request, firstResponse);
-        if (pending.Count == 0) return new(request, firstResponse, validation, calls);
-
-        var found = new Dictionary<long, Dictionary<long, ProductDictionaryCandidate>>();
-        for (var index = 0; index < pending.Count; index++)
+        async Task<ProductAttributeSuggestion> Resolve(ProductAttributeSuggestion mapping)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var query = pending[index];
-            progress?.Report($"查询 Ozon 字典候选 {index + 1}/{pending.Count}…");
-            try
+            var target = request.Attributes.Single(a => a.AttributeId == mapping.AttributeId);
+            if (mapping.Status == ProductMappingStatuses.Suggested && target.DictionaryId <= 0)
+                return mapping;
+            if (target.DictionaryId <= 0 || mapping.Values.Count != 1)
+                return Manual(mapping, "规则无法确定合法值，等待人工填写/校验。");
+            var text = mapping.Values[0].Text;
+            var key = (target.AttributeId, text);
+            if (!cache.TryGetValue(key, out var found))
             {
-                var values = await _dictionaries.SearchAttributeValuesAsync(ozonCredentials,
-                    request.DescriptionCategoryId, request.TypeId, query.AttributeId, query.Text, cancellationToken);
-                if (!found.TryGetValue(query.AttributeId, out var candidates))
-                    found[query.AttributeId] = candidates = [];
-                foreach (var value in values.Where(v => v.ValueId > 0 && !string.IsNullOrWhiteSpace(v.Value)))
-                    candidates.TryAdd(value.ValueId, new(value.ValueId, value.Value));
-                if (values.Count == 0)
-                    issues.Add(new("warning", "dictionary.no_candidates", "product", query.AttributeId,
-                        $"文本“{query.Text}”没有查到候选；这不代表源商品事实缺失或完整字典中一定没有对应值。"));
+                try
+                {
+                    var values = await _dictionaries.SearchAttributeValuesAsync(ozonCredentials,
+                        request.DescriptionCategoryId, request.TypeId, target.AttributeId, text, cancellationToken);
+                    found = values.Where(v => v.ValueId > 0 && !string.IsNullOrWhiteSpace(v.Value))
+                        .Select(v => new ProductDictionaryCandidate(v.ValueId, v.Value)).Distinct().ToArray();
+                    candidates[target.AttributeId].AddRange(found);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                catch (Exception)
+                {
+                    issues.Add(new("warning", "dictionary.query_failed", "product", target.AttributeId,
+                        "字典查询失败，目标值留空，等待人工校验。"));
+                    return Manual(mapping, "字典查询失败，等待人工填写/校验。");
+                }
+                cache[key] = found;
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch (Exception)
-            {
-                // Never copy provider exceptions or credentials into a product preview.
-                issues.Add(new("warning", "dictionary.query_failed", "product", query.AttributeId,
-                    $"文本“{query.Text}”的字典查询失败，本轮保留未解决状态。"));
-            }
+            cancellationToken.ThrowIfCancellationRequested();
+            // Never pick a fuzzy hit, translate a source value, or choose the first search result.
+            var exact = found.Where(v => string.Equals(v.Text, text, StringComparison.Ordinal)).Distinct().ToArray();
+            return exact.Length == 1
+                ? mapping with { Status = ProductMappingStatuses.Suggested,
+                    Values = [new(exact[0].Text, exact[0].ValueId)] }
+                : Manual(mapping, "字典没有唯一精确命中，目标值和 valueId 留空，等待人工填写/校验。");
         }
-        if (!found.Values.Any(values => values.Count > 0))
-            return new(request, firstResponse, ProductMappingValidator.Validate(request, firstResponse, issues), calls);
 
-        request = request with
+        var product = new List<ProductAttributeSuggestion>();
+        foreach (var mapping in match.Suggestions.ProductMappings) product.Add(await Resolve(mapping));
+        var variants = new List<ProductVariantSuggestion>();
+        foreach (var variant in match.Suggestions.Variants)
         {
-            Attributes = request.Attributes.Select(a => a with
-            {
-                DictionaryCandidates = found.TryGetValue(a.AttributeId, out var values)
-                    ? values.Values.OrderBy(v => v.ValueId).ToArray() : [],
-            }).ToArray(),
+            var own = new List<ProductAttributeSuggestion>();
+            foreach (var mapping in variant.Mappings) own.Add(await Resolve(mapping));
+            // A failed SKU rule must suppress a product-level value for that SKU.
+            foreach (var gap in match.Gaps.Where(g => g.ScopeKey == variant.VariantKey))
+                if (!own.Any(m => m.AttributeId == gap.AttributeId))
+                    own.Add(Blank(gap.AttributeId, gap.Message));
+            foreach (var attribute in request.Attributes)
+                if (!own.Any(m => m.AttributeId == attribute.AttributeId) &&
+                    !product.Any(m => m.AttributeId == attribute.AttributeId))
+                    own.Add(Blank(attribute.AttributeId, "无可用确定性规则或证据，等待人工填写/校验。"));
+            variants.Add(new(variant.VariantKey, own));
+        }
+        if (request.Skus.Count == 0)
+            foreach (var attribute in request.Attributes)
+                if (!product.Any(m => m.AttributeId == attribute.AttributeId))
+                    product.Add(Blank(attribute.AttributeId, "无可用确定性规则或证据，等待人工填写/校验。"));
+        request = request with { Attributes = request.Attributes.Select(a => a with
+            { DictionaryCandidates = candidates[a.AttributeId].Distinct().ToArray() }).ToArray() };
+        var response = new ProductMappingResponse(request.RequestId, product, variants, []);
+        var validation = ProductMappingValidator.Validate(request, response, issues);
+        // Invalid deterministic values are also blanked, with the original evidence retained.
+        ProductAttributeSuggestion Sanitize(string scope, ProductAttributeSuggestion mapping) =>
+            validation.Issues.Any(i => i.Severity == "error" && i.ScopeKey == scope && i.AttributeId == mapping.AttributeId)
+                ? Manual(mapping, "规则结果未通过字段约束校验，等待人工填写/校验。") : mapping;
+        response = response with
+        {
+            ProductMappings = response.ProductMappings.Select(m => Sanitize("product", m)).ToArray(),
+            Variants = response.Variants.Select(v => v with
+                { Mappings = v.Mappings.Select(m => Sanitize(v.VariantKey, m)).ToArray() }).ToArray(),
         };
-        progress?.Report("AI 正在根据真实字典候选完成第二轮建议，随后执行程序校验…");
-        ProductMappingCallResult second;
-        try
-        {
-            second = await _mapper.MapAsync(aiCredentials, request, cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception)
-        {
-            // A failed refinement must not discard the already validated first-pass suggestions.
-            // Keep dictionary values pending: fetched candidates alone do not select a correct value.
-            issues.Add(new("warning", "ai.refinement_failed", "product", null,
-                "字典补充后的 AI 请求未完成，已保留首轮建议；待解析属性仍为未解决，可重新运行。"));
-            return new(request, firstResponse,
-                ProductMappingValidator.Validate(request, firstResponse, issues), calls);
-        }
+        issues.AddRange(validation.Issues.Where(i => i.Severity == "error")
+            .Select(i => i with { Severity = "warning", Code = "manual." + i.Code }));
         cancellationToken.ThrowIfCancellationRequested();
-        calls.Add(second);
-        issues.AddRange(second.ParseIssues);
-        if (second.Response is null)
-            return new(request, firstResponse,
-                ProductMappingValidator.Validate(request, firstResponse, issues), calls);
-        var normalizedSecond = ProductMappingResponseNormalizer.Normalize(request, second.Response);
-        issues.AddRange(normalizedSecond.Issues);
-        var secondResponse = ruleMatch.MergeWith(normalizedSecond.Response);
-        return new(request, secondResponse,
-            ProductMappingValidator.Validate(request, secondResponse, issues), calls);
+        return new(request, response, ProductMappingValidator.Validate(request, response, issues), []);
     }
+
+    private static ProductAttributeSuggestion Blank(long id, string reason) =>
+        new(id, null, ProductMappingStatuses.ManualRequired, [], [], reason);
+
+    private static ProductAttributeSuggestion Manual(ProductAttributeSuggestion mapping, string reason) =>
+        mapping with { Status = ProductMappingStatuses.ManualRequired, Values = [], Reason = reason };
 }

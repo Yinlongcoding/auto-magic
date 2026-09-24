@@ -4,6 +4,7 @@
   const MAX_ROOTS = 60;
   const MAX_VISITED_NODES = 20_000;
   const MAX_DEPTH = 14;
+  const MAX_CARTESIAN_COMBINATIONS = 500;
   const GLOBAL_ROOT_NAMES = [
     '__INIT_DATA__',
     '__INITIAL_STATE__',
@@ -49,7 +50,9 @@
     }
 
     return {
-      status: selected.combinations.length > 0 ? 'verified' : 'dimensions_only',
+      status: selected.combinations.length === 0 ? 'dimensions_only'
+        : selected.combinations[0].verification === 'dimension-cartesian'
+          ? 'dimension_cartesian' : 'verified',
       dimensions: selected.dimensions,
       combinations: selected.combinations,
       diagnostics: {
@@ -189,12 +192,15 @@
 
     const parsedDimensions = parseDimensions(source.props, sourcePath);
     if (parsedDimensions.dimensions.length === 0) return null;
-    const combinations = parseCombinations(
+    const observedCombinations = parseCombinations(
       source.info,
       source.infoPath,
       parsedDimensions.dimensions,
       parsedDimensions.optionLookup,
     );
+    const combinations = observedCombinations.length > 0
+      ? observedCombinations
+      : expandDimensions(parsedDimensions.dimensions, sourcePath);
     const signature = JSON.stringify({
       d: parsedDimensions.dimensions.map((dimension) => [
         dimension.name,
@@ -316,6 +322,32 @@
       items.findIndex((item) => item.combinationKey === combination.combinationKey) === index);
   }
 
+  function expandDimensions(dimensions, sourcePath) {
+    if (dimensions.length === 0 || dimensions.some((dimension) => dimension.options.length === 0)) return [];
+    const count = dimensions.reduce((total, dimension) => total * dimension.options.length, 1);
+    if (!Number.isSafeInteger(count) || count > MAX_CARTESIAN_COMBINATIONS) return [];
+
+    let selections = [[]];
+    for (const dimension of dimensions) {
+      selections = selections.flatMap((selected) =>
+        dimension.options.map((option) => [...selected, { dimension, option }]));
+    }
+    return selections.map((selected) => ({
+      skuId: null,
+      combinationKey: `axes:${selected.map(({ option }) => option.optionKey).join('|')}`,
+      verification: 'dimension-cartesian',
+      options: Object.fromEntries(selected.map(({ dimension, option }) =>
+        [dimension.name, option.sourceValue])),
+      optionIds: Object.fromEntries(selected.map(({ dimension, option }) =>
+        [dimension.name, option.sourceOptionId ?? option.optionKey])),
+      price: null,
+      stock: null,
+      availability: 'unknown',
+      imageUrl: selected.map(({ option }) => option.imageUrl).find(Boolean) ?? null,
+      sourcePath,
+    }));
+  }
+
   function decodeOptions(propPath, dimensions, optionLookup) {
     const options = {};
     const optionIds = {};
@@ -403,7 +435,9 @@
   }
 
   function score(candidate) {
-    return candidate.combinations.length * 100 +
+    const observed = candidate.combinations.some((combination) =>
+      combination.verification !== 'dimension-cartesian');
+    return (observed ? 100_000 : 0) + candidate.combinations.length * 100 +
       candidate.dimensions.reduce((count, dimension) => count + dimension.options.length, 0);
   }
 

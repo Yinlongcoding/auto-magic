@@ -1385,7 +1385,8 @@ async function captureRenderedDetail(job, item, itemIndex, existingTabId = null)
       const combinations = extraction.raw?.skuCombinations ?? [];
       const hasSkuEvidence = dimensions.length > 0 ||
         Number(extraction.diagnostics?.skuTextCount ?? 0) > 0;
-      const needSku = hasSkuEvidence && combinations.length === 0;
+      const needSku = hasSkuEvidence && (combinations.length === 0 ||
+        extraction.raw?.skuMatrixStatus === 'dimension_cartesian');
       if (needAttributes || needSku) {
         const preparation = await chrome.tabs.sendMessage(tabId, {
           type: 'PREPARE_1688_TARGETED_DETAIL',
@@ -1405,10 +1406,12 @@ async function captureRenderedDetail(job, item, itemIndex, existingTabId = null)
       const finalCombinations = extraction.raw?.skuCombinations ?? [];
       const unresolvedSkuEvidence = (finalDimensions.length > 0 ||
         Number(extraction.diagnostics?.skuTextCount ?? 0) > 0) && finalCombinations.length === 0;
+      const inferredSkuEvidence = extraction.raw?.skuMatrixStatus === 'dimension_cartesian';
       const warnings = [];
       if (!hasAttributes) warnings.push('详情页已加载完成，但未采集到商品属性。');
       if (unresolvedSkuEvidence) warnings.push('页面存在SKU证据，但未取得可追溯的真实SKU组合。');
-      return { tabId, result: { ...base, status: hasAttributes && !unresolvedSkuEvidence ? 'success' : 'partial', finalUrl: extraction.finalUrl, capturedAt: extraction.capturedAt, pageTitle: extraction.pageTitle, facts, diagnostics: extraction.diagnostics ?? null, raw: extraction.raw ?? null, warnings, errors: [] } };
+      if (inferredSkuEvidence) warnings.push('已根据规格轴枚举SKU组合；逐组合库存和价格尚未确认。');
+      return { tabId, result: { ...base, status: hasAttributes && !unresolvedSkuEvidence && !inferredSkuEvidence ? 'success' : 'partial', finalUrl: extraction.finalUrl, capturedAt: extraction.capturedAt, pageTitle: extraction.pageTitle, facts, diagnostics: extraction.diagnostics ?? null, raw: extraction.raw ?? null, warnings, errors: [] } };
     } catch (error) {
       const failureCode = classifyDetailFailure(error);
       if (failureCode === 'tab_lost' && tabAttempt === 0) {

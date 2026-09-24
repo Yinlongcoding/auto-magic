@@ -71,7 +71,7 @@ public static class OzonFieldCompositionEngine
 
         var productMappings = Usable(response.ProductMappings);
         var variantMappings = response.Variants.ToDictionary(variant => variant.VariantKey,
-            variant => Usable(variant.Mappings), StringComparer.Ordinal);
+            variant => variant.Mappings, StringComparer.Ordinal);
         var attributes = request.Attributes.ToDictionary(attribute => attribute.AttributeId);
         var items = new List<OzonImportItemDraft>();
         foreach (var sku in request.Skus)
@@ -82,7 +82,11 @@ public static class OzonFieldCompositionEngine
                     "映射响应缺少当前 SKU。"));
                 continue;
             }
-            var effective = productMappings.Concat(ownMappings)
+            var overrides = ownMappings.Select(m => (m.AttributeId, m.ComplexInstanceKey)).ToHashSet();
+            var effective = productMappings.Where(m =>
+                    !overrides.Contains((m.AttributeId, m.ComplexInstanceKey)) &&
+                    !overrides.Contains((m.AttributeId, (string?)null)))
+                .Concat(Usable(ownMappings))
                 .GroupBy(mapping => (mapping.AttributeId, mapping.ComplexInstanceKey))
                 .Select(group => group.Last())
                 .ToArray();

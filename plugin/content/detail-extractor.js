@@ -356,8 +356,10 @@
           reason: '规格组合结构不完整或缺少规格轴。',
         });
       }
+      const inferred = accepted.length > 0 && accepted.every((combination) =>
+        combination.verification === 'dimension-cartesian');
       const status = accepted.length === structured.combinations.length
-        ? 'verified'
+        ? inferred ? 'dimension_cartesian' : 'verified'
         : accepted.length > 0 ? 'partially_verified' : 'invalid_structure';
       return {
         status,
@@ -366,9 +368,11 @@
         diagnostics: {
           ...structured.diagnostics,
           status,
-          strategy: 'structured-json',
+          strategy: inferred ? 'dimension-cartesian' : 'structured-json',
           reason: excluded.length === 0
-            ? '已从页面上下文结构化数据还原真实SKU组合。'
+            ? inferred
+              ? '根据页面规格轴枚举SKU组合；组合库存和价格尚未由页面逐项确认。'
+              : '已从页面上下文结构化数据还原真实SKU组合。'
             : '只保留来源可追溯且规格结构完整的真实SKU组合。',
           dimensionCount: structured.dimensions.length,
           observedCombinationCount: structured.combinations.length,
@@ -437,7 +441,8 @@
           return {
             skuId: cleanText(combination?.skuId) || null,
             combinationKey: cleanText(combination?.combinationKey) || `structured:${index + 1}`,
-            verification: 'structured-json',
+            verification: cleanText(combination?.verification) === 'dimension-cartesian'
+              ? 'dimension-cartesian' : 'structured-json',
             options: capturedOptions,
             optionIds,
             price: optionalNumber(combination?.price),

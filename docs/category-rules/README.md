@@ -1,5 +1,7 @@
 # 分类规则匹配与 Ozon 字段组合（第一版）
 
+> 后续文件方案已确认取消 common，采用品类 rules.json + types/{typeId}.json；规则命中直接使用，上架人工确认纠正后回写替换对应有效映射，保留历史版本。JSON 加载与人工回写尚未实现。详见[文件方案与人工纠正规则](../field-matching/manual-review-learning-plan.md)。下文三层结构描述的是现有 C# 实现。
+
 当前规则目录是一个可运行的空框架。它允许真实商品调试从零开始，并在每次验证后以代码变更逐条增加规则；当前版本没有预置任何服装、电子或其他品类的业务映射。
 
 ## 规则边界
@@ -30,16 +32,16 @@ var catalog = new CategoryRuleCatalog("1.0.1",
 
 ## 当前执行链路
 
-`CategoryRuleMatchingEngine` 先产生确定性建议和缺口。AI 仍接收当前完整合同以补齐空规则覆盖不到的字段；最终合并时，直接文本规则覆盖 AI 的同属性建议，字典规则允许 AI 从程序查询得到的真实候选中完成选择。合并结果再次经过 `ProductMappingValidator`。
+`CategoryRuleMatchingEngine` 先产生确定性建议和缺口。`ProductMappingRunner` 不调用 AI/Qwen，只允许已绑定字典字段的唯一精确命中；无规则、证据缺失/冲突、未知字典值及校验失败均输出空值 `manual_required`。未知的必填与选填字段都会展示为人工待办。SKU 待办会抑制该属性的商品公共值，防止组合草稿回填。详见 [人工复核与学习规划](../field-matching/manual-review-learning-plan.md)。
 
-`OzonFieldCompositionEngine` 只接受合同校验结果。它为每个真实来源 SKU 生成一个独立的 Ozon `items[]` 元素，将商品公共属性复制到每个元素，再用当前 SKU 属性覆盖同键值。复杂属性按 `complexInstanceKey` 分组。多个 SKU 因此是多个 offer；后续如需在 Ozon 前台合并成一张商品卡，应由品类规则把该 Schema 允许的分组属性写成一致值，而不是把多个 SKU 塞进一个 API item。
+`OzonFieldCompositionEngine` 只接受合同校验结果。它为每个已记录的 SKU 组合生成一个独立的 Ozon `items[]` 属性草稿，将商品公共属性复制到每个元素，再用当前 SKU 属性覆盖同键值。由规格轴笛卡尔积推导的组合会明确标记为待核实，不能据此填入库存或价格。复杂属性按 `complexInstanceKey` 分组。多个 SKU 因此是多个 offer；后续如需在 Ozon 前台合并成一张商品卡，应由品类规则把该 Schema 允许的分组属性写成一致值，而不是把多个 SKU 塞进一个 API item。
 
 第一阶段没有处理图片、价格、库存、尺寸、重量和税率。组合结果会明确返回 `composition.commercial_fields_deferred`，`ReadyForSubmit` 保持 false，不能直接提交 Ozon。
 
 ## 界面查看
 
-选择商品与 Ozon 类型并运行 AI 映射后，在“字段匹配 → 引擎结果 JSON”查看：
+选择商品与 Ozon 类型并点击“运行规则匹配”后，在“字段匹配 → 引擎结果 JSON”查看：
 
-- `mapping`：AI 与确定性规则合并后的校验结果；
+- `mapping`：确定性匹配与待人工空值的校验结果；
 - `categoryRules`：本次命中的规则、证据和缺口；
 - `ozonImportDraft`：逐 SKU 组合的 Ozon 属性草稿及阻断项。

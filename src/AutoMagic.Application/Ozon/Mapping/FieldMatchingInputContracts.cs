@@ -264,8 +264,10 @@ public static partial class FieldMatchingInputBuilder
             var optionIds = ReadStringDictionary(combination, "optionIds");
 
             decimal? price = combination.TryGetProperty("price", out var priceValue) &&
+                             priceValue.ValueKind == JsonValueKind.Number &&
                              priceValue.TryGetDecimal(out var parsedPrice) ? parsedPrice : null;
             long? stock = combination.TryGetProperty("stock", out var stockValue) &&
+                          stockValue.ValueKind == JsonValueKind.Number &&
                           stockValue.TryGetInt64(out var parsedStock) ? parsedStock : null;
             return new FieldMatchingSkuCombination(
                 ReadString(combination, "combinationKey") ?? string.Empty,

@@ -51,7 +51,7 @@ export const DETAIL_FACT_OPTIONS = Object.freeze({
   batchSize: 10,
   batchPauseMs: 5_000,
   retryPauseMs: 5_000,
-  cacheVersion: 'v11',
+  cacheVersion: 'v12',
 });
 
 export function isAllowed1688Url(value) {

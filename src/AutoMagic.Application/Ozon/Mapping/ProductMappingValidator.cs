@@ -208,7 +208,7 @@ public static class ProductMappingValidator
                     target.IsRequired, mapping.Status, string.Join("；", values.Select(v => v.Text)),
                     string.Join(", ", values.Where(v => v.DictionaryValueId.HasValue).Select(v => v.DictionaryValueId)),
                     string.Join("\n", evidence), error ? "校验失败" :
-                        mapping.Status == ProductMappingStatuses.Suggested ? "约束通过·待语义复核" : "未解决",
+                        mapping.Status == ProductMappingStatuses.Suggested ? "约束通过·待语义复核" : mapping.Status == ProductMappingStatuses.ManualRequired ? "待人工填写/校验" : "未解决",
                     mapping.Reason));
             }
         }

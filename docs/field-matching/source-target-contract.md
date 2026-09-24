@@ -1,5 +1,7 @@
 # AM 字段匹配输入/输出结构
 
+> 2026-09-24 需求变更：正式匹配已改为确定性规则；无法解析的字段/valueId 留空待人工填写或校验，禁止 AI/Qwen 补齐。桌面新增“运行规则匹配”，原 AI 输入预览只作本地诊断。下文的两轮 AI 运行描述属于历史设计。当前学习现状、实现边界与新规划见 `docs/field-matching/manual-review-learning-plan.md`。
+
 > 2026-09-20：本文保留采集适配和 V1 合同背景。当前桌面 AI 入口采用 [ProductMapping V2 第一阶段合同](../ai-mapping/phase1-product-mapping.md)：全部真实 SKU、AI 主导、程序校验、只读预览；不执行下文旧规则优先流程或生成可发布结果。
 
 ## 1. 目标
