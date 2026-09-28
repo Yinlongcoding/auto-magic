@@ -23,8 +23,6 @@ public partial class MainViewModel : ObservableObject
     private readonly IOzonTestSettingsStore _ozonTestSettingsStore;
     private readonly IQwenTestSettingsStore _qwenTestSettingsStore;
     private readonly CollectionSnapshotStore _collectionSnapshotStore;
-    private readonly ProductMappingRunner _productMappingRunner;
-    private readonly CategoryRuleMatchingEngine _categoryRuleEngine;
     private readonly Dispatcher _dispatcher;
     private bool _initialized;
     private OzonCategorySchema? _ozonSchema;
@@ -176,8 +174,7 @@ public partial class MainViewModel : ObservableObject
         IOzonTestSettingsStore ozonTestSettingsStore,
         IQwenTestSettingsStore qwenTestSettingsStore,
         CollectionSnapshotStore collectionSnapshotStore,
-        ProductMappingRunner productMappingRunner,
-        CategoryRuleMatchingEngine categoryRuleEngine)
+        RuleReviewService ruleReviewService)
     {
         _searchBridge = searchBridge;
         _exchangeRateService = exchangeRateService;
@@ -186,8 +183,7 @@ public partial class MainViewModel : ObservableObject
         _ozonTestSettingsStore = ozonTestSettingsStore;
         _qwenTestSettingsStore = qwenTestSettingsStore;
         _collectionSnapshotStore = collectionSnapshotStore;
-        _productMappingRunner = productMappingRunner;
-        _categoryRuleEngine = categoryRuleEngine;
+        _ruleReviewService = ruleReviewService;
         _dispatcher = Dispatcher.CurrentDispatcher;
         _statusText = GetConnectionText(searchBridge.IsExtensionConnected);
         _searchBridge.ConnectionChanged += OnConnectionChanged;
@@ -655,7 +651,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     private bool CanRunQwenMapping() =>
-        !IsRunningQwenMapping && !IsBusy && !IsLoadingOzonSchema &&
+        !IsReviewBusy && !IsRunningQwenMapping && !IsBusy && !IsLoadingOzonSchema &&
         _ozonSchema is not null && _latestFieldMatchingInput is not null &&
         SelectedOzonCategory?.DescriptionCategoryId == _ozonSchema.DescriptionCategoryId &&
         SelectedOzonType?.TypeId == _ozonSchema.TypeId;
@@ -694,28 +690,24 @@ public partial class MainViewModel : ObservableObject
     {
         if (!CanRunQwenMapping() || _latestFieldMatchingInput is null) return;
         ResetProductMappingPreview("正在执行规则匹配…");
+        IsPricingExpanded = false;
         using var cancellation = new CancellationTokenSource();
         _ruleMappingCancellation = cancellation;
         var source = _latestFieldMatchingInput;
         IsRunningQwenMapping = true;
         try
         {
-            var input = ProductMappingInputBuilder.Create(source);
-            ShowSkuIdentityPlan(input.Request);
-            var run = await _productMappingRunner.RunAsync(input,
-                new OzonTemporaryCredentials(OzonClientId, OzonApiKey), null, cancellation.Token);
+            var session = await _ruleReviewService.OpenAsync(source,
+                new OzonTemporaryCredentials(OzonClientId, OzonApiKey), cancellation.Token);
             if (cancellation.IsCancellationRequested || !ReferenceEquals(source, _latestFieldMatchingInput)) return;
-            foreach (var row in run.Validation.Rows) ProductMappingRows.Add(row);
-            foreach (var issue in run.Validation.Issues) ProductMappingIssues.Add(issue);
-            FieldMatchingFinalOutputJson = JsonSerializer.Serialize(new
-            {
-                mapping = run,
-                categoryRules = _categoryRuleEngine.Match(run.Request),
-                ozonImportDraft = OzonFieldCompositionEngine.Compose(run.Request, run.Response, run.Validation),
-            }, ProductMappingJson.IndentedOptions);
-            QwenRawResponseJson = "字段匹配已禁用 AI/Qwen 补齐。";
-            QwenDictionaryStatus = "仅按确定性规则查询字典并接受唯一精确命中；其余留空。";
-            FieldMatchingFinalStatus = $"规则匹配完成：{run.Validation.UnresolvedRequiredCount} 个必填项待人工处理。当前结果只读，人工编辑保存入口尚未实现。";
+            _reviewSession = session;
+            ShowSkuIdentityPlan(session.Input.Request);
+            foreach (var row in session.Rows) ReviewRows.Add(row);
+            foreach (var issue in session.Input.SourceIssues) ProductMappingIssues.Add(issue);
+            ReviewStatus = $"已加载 {session.Rows.Count} 个目标字段；完善填写后勾选“已核对”，点击确认解析。规则目录：{_ruleReviewService.RulesPath}";
+            QwenRawResponseJson = "字段匹配不调用 AI/Qwen。";
+            QwenDictionaryStatus = "中文输入仅用于查找，无法确定官方值时请手动选择候选；绝不猜测 valueId。";
+            FieldMatchingFinalStatus = "JSON 规则匹配已完成，请在填写表单中核对。";
             QwenMappingStatus = FieldMatchingFinalStatus;
             SelectedFieldMatchingTabIndex = 0;
         }
@@ -743,6 +735,10 @@ public partial class MainViewModel : ObservableObject
     private void ResetProductMappingPreview(string status)
     {
         _ruleMappingCancellation?.Cancel();
+        _reviewSession = null;
+        SelectedReviewRow = null;
+        ReviewRows.Clear();
+        ReviewStatus = "请先运行规则匹配。";
         ProductMappingRows.Clear();
         ProductMappingIssues.Clear();
         ProductSkuIdentityRows.Clear();
@@ -911,6 +907,7 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnIsRunningQwenMappingChanged(bool value)
     {
+        OnPropertyChanged(nameof(IsReviewEditable));
         RunQwenMappingCommand.NotifyCanExecuteChanged();
         RunRuleMappingCommand.NotifyCanExecuteChanged();
         CancelProductMappingCommand.NotifyCanExecuteChanged();

@@ -5,3 +5,7 @@ artifacts/
 .vs/
 *.user
 *.suo
+
+# Local review data and interrupted atomic rule writes
+rules/*.db*
+rules/**/*.tmp

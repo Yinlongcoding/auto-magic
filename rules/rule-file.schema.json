@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Auto Magic rule file v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "categoryId",
+    "typeId",
+    "rules"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "categoryId": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "typeId": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ruleId",
+          "revision",
+          "action",
+          "status",
+          "scope",
+          "sourceLabels",
+          "attributeId",
+          "dictionaryId",
+          "targetFingerprint",
+          "strategy",
+          "values"
+        ],
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "action": {
+            "enum": [
+              "add",
+              "override",
+              "disable"
+            ]
+          },
+          "status": {
+            "enum": [
+              "active",
+              "trusted",
+              "candidate",
+              "disabled",
+              "revalidation_required"
+            ]
+          },
+          "scope": {
+            "enum": [
+              "product",
+              "sku"
+            ]
+          },
+          "sourceLabels": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "attributeId": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "dictionaryId": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "targetFingerprint": {
+            "type": "string",
+            "minLength": 1
+          },
+          "strategy": {
+            "enum": [
+              "direct",
+              "dictionary"
+            ]
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mappingId",
+                "revision",
+                "status",
+                "sourceValue",
+                "displayZh",
+                "targetValue",
+                "valueId"
+              ],
+              "properties": {
+                "mappingId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "status": {
+                  "enum": [
+                    "active",
+                    "trusted",
+                    "candidate",
+                    "disabled",
+                    "revalidation_required"
+                  ]
+                },
+                "sourceValue": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "displayZh": {
+                  "type": "string"
+                },
+                "targetValue": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "valueId": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

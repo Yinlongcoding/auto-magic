@@ -21,6 +21,15 @@ public partial class App : System.Windows.Application
     private IHost? _host;
     private Mutex? _singleInstance;
 
+    private static string ResolveRulesPath()
+    {
+        var configured = Environment.GetEnvironmentVariable("AUTO_MAGIC_RULES_DIRECTORY");
+        if (!string.IsNullOrWhiteSpace(configured)) return Path.GetFullPath(configured);
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+            if (File.Exists(Path.Combine(directory.FullName, "AutoMagic.slnx"))) return Path.Combine(directory.FullName, "rules");
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AutoMagic", "rules");
+    }
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         _singleInstance = new Mutex(true, @"Local\AutoMagic.Desktop", out var isFirstInstance);
@@ -55,15 +64,8 @@ public partial class App : System.Windows.Application
             client.Timeout = TimeSpan.FromSeconds(60);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("AutoMagic/0.2");
         }).RedactLoggedHeaders(_ => true);
-        builder.Services.AddHttpClient<IProductSemanticMapper, QwenProductSemanticMapper>(client =>
-        {
-            client.BaseAddress = new Uri(QwenMappingRuntime.SharedBaseUrl);
-            client.Timeout = TimeSpan.FromSeconds(120);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("AutoMagic/0.4");
-        }).RedactLoggedHeaders(_ => true);
-        builder.Services.AddSingleton(CategoryRuleCatalog.Empty);
-        builder.Services.AddSingleton<CategoryRuleMatchingEngine>();
-        builder.Services.AddTransient<ProductMappingRunner>();
+        builder.Services.AddSingleton<IRuleReviewStore>(_ => new JsonRuleReviewStore(ResolveRulesPath()));
+        builder.Services.AddTransient<RuleReviewService>();
         builder.Services.AddSingleton<ILocalOzonCategoryCatalog>(_ =>
             new LocalOzonCategoryCatalog(
                 Path.Combine(AppContext.BaseDirectory, "Data", "ozon-category-tree.test.json")));

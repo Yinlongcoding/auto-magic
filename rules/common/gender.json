@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "moduleId": "gender",
+  "rules": [
+    {
+      "ruleId": "gender",
+      "revision": 1,
+      "action": "add",
+      "status": "active",
+      "scope": "product",
+      "sourceLabels": [
+        "性别",
+        "适用性别"
+      ],
+      "attributeId": 9163,
+      "dictionaryId": 320,
+      "targetFingerprint": "*",
+      "strategy": "dictionary",
+      "values": [
+        {
+          "mappingId": "gender.male",
+          "revision": 1,
+          "status": "active",
+          "sourceValue": "男性",
+          "displayZh": "男性",
+          "targetValue": "Мужской",
+          "valueId": 22880
+        },
+        {
+          "mappingId": "gender.female",
+          "revision": 1,
+          "status": "active",
+          "sourceValue": "女性",
+          "displayZh": "女性",
+          "targetValue": "женский",
+          "valueId": 22881
+        },
+        {
+          "mappingId": "gender.girls",
+          "revision": 1,
+          "status": "active",
+          "sourceValue": "女孩",
+          "displayZh": "女孩",
+          "targetValue": "Девочки",
+          "valueId": 22882
+        },
+        {
+          "mappingId": "gender.boys",
+          "revision": 1,
+          "status": "active",
+          "sourceValue": "男孩",
+          "displayZh": "男孩",
+          "targetValue": "Мальчики",
+          "valueId": 22883
+        }
+      ]
+    }
+  ]
+}

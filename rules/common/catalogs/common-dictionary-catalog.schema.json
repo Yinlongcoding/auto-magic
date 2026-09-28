@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Auto Magic common Ozon dictionary catalog v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "moduleId",
+    "attributeId",
+    "status",
+    "source",
+    "complete",
+    "values"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "moduleId": { "type": "string", "minLength": 1 },
+    "attributeId": { "type": "integer", "minimum": 1 },
+    "status": { "enum": ["reference", "active"] },
+    "source": { "type": "string", "minLength": 1 },
+    "complete": { "type": "boolean" },
+    "values": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["valueId", "displayZh", "targetValue"],
+        "properties": {
+          "valueId": { "type": "integer", "minimum": 1 },
+          "displayZh": { "type": "string", "minLength": 1 },
+          "targetValue": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "categoryId": 200000933,
+  "typeId": 93182,
+  "rules": [
+    {
+      "ruleId": "dress-style",
+      "revision": 1,
+      "action": "add",
+      "status": "active",
+      "scope": "product",
+      "sourceLabels": ["款式", "连衣裙款式"],
+      "attributeId": 23079,
+      "dictionaryId": 124413020,
+      "targetFingerprint": "*",
+      "strategy": "dictionary",
+      "values": [
+        { "mappingId": "dress-style.972087274", "revision": 1, "status": "active", "sourceValue": "阿巴亚", "displayZh": "阿巴亚", "targetValue": "абайя", "valueId": 972087274 },
+        { "mappingId": "dress-style.972087307", "revision": 1, "status": "active", "sourceValue": "针织", "displayZh": "针织", "targetValue": "вязаное", "valueId": 972087307 },
+        { "mappingId": "dress-style.972087309", "revision": 1, "status": "active", "sourceValue": "年", "displayZh": "年", "targetValue": "годе", "valueId": 972087309 },
+        { "mappingId": "dress-style.972087312", "revision": 1, "status": "active", "sourceValue": "牛仔", "displayZh": "牛仔", "targetValue": "джинсовое", "valueId": 972087312 },
+        { "mappingId": "dress-style.972087322", "revision": 1, "status": "active", "sourceValue": "角", "displayZh": "角", "targetValue": "кейп", "valueId": 972087322 },
+        { "mappingId": "dress-style.972087323", "revision": 1, "status": "active", "sourceValue": "和服", "displayZh": "和服", "targetValue": "кимоно", "valueId": 972087323 },
+        { "mappingId": "dress-style.972087327", "revision": 1, "status": "active", "sourceValue": "皮革", "displayZh": "皮革", "targetValue": "кожаное", "valueId": 972087327 },
+        { "mappingId": "dress-style.972087329", "revision": 1, "status": "active", "sourceValue": "组合", "displayZh": "组合", "targetValue": "комбинация", "valueId": 972087329 },
+        { "mappingId": "dress-style.972087354", "revision": 1, "status": "active", "sourceValue": "高领连衣裙", "displayZh": "高领连衣裙", "targetValue": "платье-водолазка", "valueId": 972087354 },
+        { "mappingId": "dress-style.972087356", "revision": 1, "status": "active", "sourceValue": "面条连衣裙", "displayZh": "面条连衣裙", "targetValue": "платье-лапша", "valueId": 972087356 },
+        { "mappingId": "dress-style.972087358", "revision": 1, "status": "active", "sourceValue": "芭蕾舞短裙连衣裙", "displayZh": "芭蕾舞短裙连衣裙", "targetValue": "платье-пачка", "valueId": 972087358 },
+        { "mappingId": "dress-style.972087359", "revision": 1, "status": "active", "sourceValue": "夹克连衣裙", "displayZh": "夹克连衣裙", "targetValue": "платье-пиджак", "valueId": 972087359 },
+        { "mappingId": "dress-style.972087360", "revision": 1, "status": "active", "sourceValue": "Polo 连衣裙", "displayZh": "Polo 连衣裙", "targetValue": "платье-поло", "valueId": 972087360 },
+        { "mappingId": "dress-style.972087361", "revision": 1, "status": "active", "sourceValue": "衬衫连衣裙", "displayZh": "衬衫连衣裙", "targetValue": "платье-рубашка", "valueId": 972087361 },
+        { "mappingId": "dress-style.972087362", "revision": 1, "status": "active", "sourceValue": "毛衣连衣裙", "displayZh": "毛衣连衣裙", "targetValue": "платье-свитер", "valueId": 972087362 },
+        { "mappingId": "dress-style.972087363", "revision": 1, "status": "active", "sourceValue": "卫衣连衣裙", "displayZh": "卫衣连衣裙", "targetValue": "платье-толстовка", "valueId": 972087363 },
+        { "mappingId": "dress-style.972087371", "revision": 1, "status": "active", "sourceValue": "直接", "displayZh": "直接", "targetValue": "прямое", "valueId": 972087371 },
+        { "mappingId": "dress-style.972087380", "revision": 1, "status": "active", "sourceValue": "香味", "displayZh": "香味", "targetValue": "с запахом", "valueId": 972087380 },
+        { "mappingId": "dress-style.972087388", "revision": 1, "status": "active", "sourceValue": "露背", "displayZh": "露背", "targetValue": "с открытой спиной", "valueId": 972087388 },
+        { "mappingId": "dress-style.972087389", "revision": 1, "status": "active", "sourceValue": "露肩", "displayZh": "露肩", "targetValue": "с открытыми плечами", "valueId": 972087389 },
+        { "mappingId": "dress-style.972087394", "revision": 1, "status": "active", "sourceValue": "带细肩带", "displayZh": "带细肩带", "targetValue": "с тонкими бретельками", "valueId": 972087394 },
+        { "mappingId": "dress-style.972087402", "revision": 1, "status": "active", "sourceValue": "莎莉", "displayZh": "莎莉", "targetValue": "сари", "valueId": 972087402 },
+        { "mappingId": "dress-style.972087409", "revision": 1, "status": "active", "sourceValue": "坐火车", "displayZh": "坐火车", "targetValue": "со шлейфом", "valueId": 972087409 },
+        { "mappingId": "dress-style.972087420", "revision": 1, "status": "active", "sourceValue": "变压器", "displayZh": "变压器", "targetValue": "трансформер", "valueId": 972087420 },
+        { "mappingId": "dress-style.972087432", "revision": 1, "status": "active", "sourceValue": "鞘", "displayZh": "鞘", "targetValue": "футляр", "valueId": 972087432 },
+        { "mappingId": "dress-style.972087448", "revision": 1, "status": "active", "sourceValue": "分层连衣裙", "displayZh": "分层连衣裙", "targetValue": "ярусное платье", "valueId": 972087448 },
+        { "mappingId": "dress-style.972189943", "revision": 1, "status": "active", "sourceValue": "桶", "displayZh": "桶", "targetValue": "бочонок", "valueId": 972189943 },
+        { "mappingId": "dress-style.972874592", "revision": 1, "status": "active", "sourceValue": "无袖连衣裙", "displayZh": "无袖连衣裙", "targetValue": "сарафан", "valueId": 972874592 }
+      ]
+    }
+  ]
+}

@@ -101,7 +101,7 @@
         </Border>
 
         <Expander Grid.Row="3"
-                  IsExpanded="True"
+                  IsExpanded="{Binding IsPricingExpanded, Mode=TwoWay}"
                   Margin="0,0,0,14"
                   HorizontalContentAlignment="Stretch">
             <Expander.Header>
@@ -352,25 +352,67 @@
                     </Border>
 
                     <TabControl Grid.Row="2" SelectedIndex="{Binding SelectedFieldMatchingTabIndex, Mode=TwoWay}">
-                        <TabItem Header="AI 映射建议（暂停）">
-                            <DataGrid ItemsSource="{Binding ProductMappingRows}"
-                                      AutoGenerateColumns="False"
-                                      IsReadOnly="True"
-                                      CanUserAddRows="False"
-                                      RowHeaderWidth="0"
-                                      AlternatingRowBackground="#F8FAFC">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="商品 / SKU" Binding="{Binding ScopeDisplay}" Width="190" />
-                                    <DataGridTextColumn Header="Ozon 属性" Binding="{Binding AttributeName}" Width="150" />
-                                    <DataGridCheckBoxColumn Header="必填" Binding="{Binding IsRequired}" Width="50" />
-                                    <DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="140" />
-                                    <DataGridTextColumn Header="建议值" Binding="{Binding ValueDisplay}" Width="160" />
-                                    <DataGridTextColumn Header="字典 ID" Binding="{Binding DictionaryIdDisplay}" Width="110" />
-                                    <DataGridTextColumn Header="程序检查" Binding="{Binding CheckDisplay}" Width="160" />
-                                    <DataGridTextColumn Header="来源证据" Binding="{Binding EvidenceDisplay}" Width="340" />
-                                    <DataGridTextColumn Header="建议 / 未解决原因" Binding="{Binding Reason}" Width="340" />
-                                </DataGrid.Columns>
-                            </DataGrid>
+                        <TabItem Header="匹配与人工填写">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Top" Margin="8">
+                                    <TextBlock Text="{Binding ReviewStatus}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                                    <TextBlock Text="中文填写后点击确认解析；字典候选需明确选择。未勾选已核对的修改不成为有效答案；取消保存规则则仅用于当前商品。" TextWrapping="Wrap" Margin="0,0,0,8" />
+                                    <Button Content="取消当前查询 / 确认" Command="{Binding CancelReviewCommand}" HorizontalAlignment="Left" Padding="12,4" Margin="0,0,0,6" />
+                                    <StackPanel Orientation="Horizontal" IsEnabled="{Binding IsReviewEditable}">
+                                        <Button Content="保存草稿" Command="{Binding SaveReviewDraftCommand}" Padding="12,6" Margin="0,0,8,0" />
+                                        <Button Content="清除来源（仅此商品）" Command="{Binding ClearReviewSourceCommand}" Padding="12,6" Margin="0,0,8,0" />
+                                        <Button Content="查询选中行字典" Command="{Binding SearchReviewDictionaryCommand}" Padding="12,6" Margin="0,0,8,0" />
+                                        <Button Content="确认解析并保存规则" Command="{Binding ConfirmReviewCommand}" Padding="12,6" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <Border DockPanel.Dock="Bottom" Padding="10" Background="#E8EEF8" IsEnabled="{Binding IsReviewEditable}">
+                                    <Grid DataContext="{Binding SelectedReviewRow}">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="2*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                            <TextBlock Text="选中字段的来源事实（清除来源后仅保存商品人工事实）" TextWrapping="Wrap" />
+                                            <ComboBox ItemsSource="{Binding Facts}" DisplayMemberPath="Display" SelectedValuePath="FactId"
+                                                      SelectedValue="{Binding SourceFactId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                            <TextBlock Text="{Binding Statistics}" Margin="0,4,0,0" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Margin="0,0,10,0">
+                                            <TextBlock Text="备用字典搜索词（可填俄文）" />
+                                            <TextBox Text="{Binding DictionarySearchText, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="复杂属性组实例键（普通字段留空）" TextWrapping="Wrap" />
+                                            <TextBox Text="{Binding ComplexInstanceKey, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <DataGrid ItemsSource="{Binding ReviewRows}" SelectedItem="{Binding SelectedReviewRow}"
+                                          IsEnabled="{Binding IsReviewEditable}" AutoGenerateColumns="False"
+                                          CanUserAddRows="False" RowHeaderWidth="0" AlternatingRowBackground="#F8FAFC">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="商品 / SKU" Binding="{Binding ScopeDisplay}" IsReadOnly="True" Width="140" />
+                                        <DataGridTextColumn Header="Ozon 字段" Binding="{Binding AttributeName}" IsReadOnly="True" Width="130" />
+                                        <DataGridCheckBoxColumn Header="必填" Binding="{Binding IsRequired, Mode=OneWay}" IsReadOnly="True" Width="45" />
+                                        <DataGridTemplateColumn Header="中文填写 / 普通字段值" Width="150">
+                                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                                <TextBox Text="{Binding InputText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTemplateColumn Header="Ozon 官方候选" Width="175">
+                                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                                <ComboBox ItemsSource="{Binding Candidates}" DisplayMemberPath="Text"
+                                                          IsEnabled="{Binding IsDictionary}" SelectedItem="{Binding SelectedCandidate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="valueId" Binding="{Binding ValueIdDisplay}" IsReadOnly="True" Width="95" />
+                                        <DataGridTemplateColumn Header="已核对" Width="65">
+                                            <DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding Reviewed, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTemplateColumn Header="保存规则" Width="75">
+                                            <DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding SaveAsRule, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="状态" Binding="{Binding Status}" IsReadOnly="True" Width="*" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
                         </TabItem>
                         <TabItem Header="SKU 身份计划">
                             <DockPanel>

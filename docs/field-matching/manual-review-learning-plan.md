@@ -1,5 +1,7 @@
 # 确定性匹配、人工复核与持续学习规划
 
+> 2026-09-28 实现更新：桌面“运行规则匹配”已切换为 JSON 品类/类型规则与人工填写表单。支持中文填写后查询字典、人工选择合法 valueId、保存草稿、类型规则回写、SQLite 版本/审核统计和中断写入恢复。100 次有效审核且正确率 ≥98% 显示可信，低于门槛留空。最新使用与边界见 [规则说明](../../rules/README.md)。下文关于空 C# 规则目录、只读表格、尚无持久化的描述是历史状态。自动模型训练、正式上架和图形化回滚仍未实现。
+
 更新：2026-09-24。本文按本地代码与仓库设计文档核查，不是外部机器学习产品调研。
 
 ## 本次生效的需求
@@ -29,7 +31,7 @@
 
 ## 已确认的文件方案与人工纠正规则（待实现）
 
-规则文件取消 common 层，按 `rules/categories/{categoryId}/rules.json` 保存完整品类规则，按 `rules/categories/{categoryId}/types/{typeId}.json` 保存类型补充、覆盖和禁用。读取品类规则后应用类型差异；不同品类不共享属性/valueId 或信任统计。上述是目标文件方案，当前 C# 三层框架尚未迁移到 JSON。
+2026-09-28 再次确认公共属性层：经用户使用 Ozon 官方 API 在多个品类和类型验证，且 attributeId、dictionaryId、valueId 均一致的属性保存到 `rules/common/{module}.json`。当前已提升性别。原产国的 267 条完整 Ozon 官方中俄值已按 valueId 对齐并保存到 `rules/common/catalogs/origin-country.json`，作为目标字典参考；其中重复中文名称保留全部候选，匹配时必须判为歧义。待从 Schema 确认 dictionaryId 后，再建立可执行公共规则。材质、颜色待提供并复核具体配置后加入。加载顺序为 common → `rules/categories/{categoryId}/rules.json` → `types/{typeId}.json`，后层可以完整覆盖或禁用继承规则。未经跨品类验证的值不进入 common。
 
 ### 命中即使用，上架人工修正即替换
 

@@ -1,0 +1,1345 @@
+{
+  "schemaVersion": 1,
+  "moduleId": "origin-country",
+  "attributeId": 4389,
+  "status": "reference",
+  "source": "Ozon description-category attribute values API (RU and ZH_HANS)",
+  "complete": true,
+  "values": [
+    {
+      "valueId": 90295,
+      "displayZh": "俄罗斯",
+      "targetValue": "Россия"
+    },
+    {
+      "valueId": 90296,
+      "displayZh": "中国",
+      "targetValue": "Китай"
+    },
+    {
+      "valueId": 90297,
+      "displayZh": "未指定",
+      "targetValue": "Не указана"
+    },
+    {
+      "valueId": 90298,
+      "displayZh": "意大利",
+      "targetValue": "Италия"
+    },
+    {
+      "valueId": 90299,
+      "displayZh": "美国",
+      "targetValue": "США"
+    },
+    {
+      "valueId": 90300,
+      "displayZh": "德国",
+      "targetValue": "Германия"
+    },
+    {
+      "valueId": 90302,
+      "displayZh": "英国",
+      "targetValue": "Великобритания"
+    },
+    {
+      "valueId": 90303,
+      "displayZh": "欧盟",
+      "targetValue": "Европейский Союз"
+    },
+    {
+      "valueId": 90304,
+      "displayZh": "法国",
+      "targetValue": "Франция"
+    },
+    {
+      "valueId": 90305,
+      "displayZh": "土耳其",
+      "targetValue": "Турция"
+    },
+    {
+      "valueId": 90306,
+      "displayZh": "日本",
+      "targetValue": "Япония"
+    },
+    {
+      "valueId": 90307,
+      "displayZh": "奥地利",
+      "targetValue": "Австрия"
+    },
+    {
+      "valueId": 90308,
+      "displayZh": "苏联",
+      "targetValue": "СССР"
+    },
+    {
+      "valueId": 90309,
+      "displayZh": "西班牙",
+      "targetValue": "Испания"
+    },
+    {
+      "valueId": 90310,
+      "displayZh": "波兰",
+      "targetValue": "Польша"
+    },
+    {
+      "valueId": 90311,
+      "displayZh": "韩国",
+      "targetValue": "Корея"
+    },
+    {
+      "valueId": 90312,
+      "displayZh": "印度",
+      "targetValue": "Индия"
+    },
+    {
+      "valueId": 90313,
+      "displayZh": "摩尔多瓦",
+      "targetValue": "Молдова"
+    },
+    {
+      "valueId": 90314,
+      "displayZh": "加拿大",
+      "targetValue": "Канада"
+    },
+    {
+      "valueId": 90315,
+      "displayZh": "巴西",
+      "targetValue": "Бразилия"
+    },
+    {
+      "valueId": 90316,
+      "displayZh": "丹麦",
+      "targetValue": "Дания"
+    },
+    {
+      "valueId": 90317,
+      "displayZh": "中国（台湾）",
+      "targetValue": "Китай (Тайвань)"
+    },
+    {
+      "valueId": 90318,
+      "displayZh": "比利时",
+      "targetValue": "Бельгия"
+    },
+    {
+      "valueId": 90319,
+      "displayZh": "乌克兰",
+      "targetValue": "Украина"
+    },
+    {
+      "valueId": 90320,
+      "displayZh": "中国（香港）",
+      "targetValue": "Китай (Гонконг)"
+    },
+    {
+      "valueId": 90321,
+      "displayZh": "捷克",
+      "targetValue": "Чехия"
+    },
+    {
+      "valueId": 90322,
+      "displayZh": "瑞典",
+      "targetValue": "Швеция"
+    },
+    {
+      "valueId": 90323,
+      "displayZh": "瑞士",
+      "targetValue": "Швейцария"
+    },
+    {
+      "valueId": 90324,
+      "displayZh": "白俄罗斯",
+      "targetValue": "Беларусь"
+    },
+    {
+      "valueId": 90325,
+      "displayZh": "荷兰",
+      "targetValue": "Нидерланды"
+    },
+    {
+      "valueId": 90326,
+      "displayZh": "匈牙利",
+      "targetValue": "Венгрия"
+    },
+    {
+      "valueId": 90327,
+      "displayZh": "芬兰",
+      "targetValue": "Финляндия"
+    },
+    {
+      "valueId": 90328,
+      "displayZh": "泰国",
+      "targetValue": "Таиланд"
+    },
+    {
+      "valueId": 90329,
+      "displayZh": "澳大利亚",
+      "targetValue": "Австралия"
+    },
+    {
+      "valueId": 90330,
+      "displayZh": "葡萄牙",
+      "targetValue": "Португалия"
+    },
+    {
+      "valueId": 90331,
+      "displayZh": "越南",
+      "targetValue": "Вьетнам"
+    },
+    {
+      "valueId": 90332,
+      "displayZh": "荷兰",
+      "targetValue": "Голландия"
+    },
+    {
+      "valueId": 90333,
+      "displayZh": "韩国",
+      "targetValue": "Южная Корея"
+    },
+    {
+      "valueId": 90334,
+      "displayZh": "孟加拉国",
+      "targetValue": "Бангладеш"
+    },
+    {
+      "valueId": 90335,
+      "displayZh": "斯洛文尼亚",
+      "targetValue": "Словения"
+    },
+    {
+      "valueId": 90336,
+      "displayZh": "挪威",
+      "targetValue": "Норвегия"
+    },
+    {
+      "valueId": 90337,
+      "displayZh": "印度尼西亚",
+      "targetValue": "Индонезия"
+    },
+    {
+      "valueId": 90338,
+      "displayZh": "爱尔兰",
+      "targetValue": "Ирландия"
+    },
+    {
+      "valueId": 90339,
+      "displayZh": "马来西亚",
+      "targetValue": "Малайзия"
+    },
+    {
+      "valueId": 90340,
+      "displayZh": "以色列",
+      "targetValue": "Израиль"
+    },
+    {
+      "valueId": 90341,
+      "displayZh": "罗马尼亚",
+      "targetValue": "Румыния"
+    },
+    {
+      "valueId": 90342,
+      "displayZh": "保加利亚",
+      "targetValue": "Болгария"
+    },
+    {
+      "valueId": 90343,
+      "displayZh": "塞尔维亚",
+      "targetValue": "Сербия"
+    },
+    {
+      "valueId": 90344,
+      "displayZh": "希腊",
+      "targetValue": "Греция"
+    },
+    {
+      "valueId": 90345,
+      "displayZh": "墨西哥",
+      "targetValue": "Мексика"
+    },
+    {
+      "valueId": 90346,
+      "displayZh": "巴基斯坦",
+      "targetValue": "Пакистан"
+    },
+    {
+      "valueId": 90347,
+      "displayZh": "菲律宾",
+      "targetValue": "Филиппины"
+    },
+    {
+      "valueId": 90348,
+      "displayZh": "阿根廷",
+      "targetValue": "Аргентина"
+    },
+    {
+      "valueId": 90349,
+      "displayZh": "乌兹别克斯坦",
+      "targetValue": "Узбекистан"
+    },
+    {
+      "valueId": 90350,
+      "displayZh": "新西兰",
+      "targetValue": "Новая Зеландия"
+    },
+    {
+      "valueId": 90351,
+      "displayZh": "拉托维亚",
+      "targetValue": "Латвия"
+    },
+    {
+      "valueId": 90352,
+      "displayZh": "乍得",
+      "targetValue": "Чад"
+    },
+    {
+      "valueId": 90353,
+      "displayZh": "约旦",
+      "targetValue": "Иордания"
+    },
+    {
+      "valueId": 90354,
+      "displayZh": "哥伦比亚",
+      "targetValue": "Колумбия"
+    },
+    {
+      "valueId": 90355,
+      "displayZh": "捷克斯洛伐克",
+      "targetValue": "Чехословакия"
+    },
+    {
+      "valueId": 90356,
+      "displayZh": "德意志联邦共和国",
+      "targetValue": "ФРГ"
+    },
+    {
+      "valueId": 90357,
+      "displayZh": "伊朗",
+      "targetValue": "Иран"
+    },
+    {
+      "valueId": 90358,
+      "displayZh": "科特迪瓦",
+      "targetValue": "Кот-д' Ивуар"
+    },
+    {
+      "valueId": 90359,
+      "displayZh": "马其顿",
+      "targetValue": "Македония"
+    },
+    {
+      "valueId": 90360,
+      "displayZh": "南斯拉夫",
+      "targetValue": "Югославия"
+    },
+    {
+      "valueId": 90361,
+      "displayZh": "爱沙尼亚",
+      "targetValue": "Эстония"
+    },
+    {
+      "valueId": 90362,
+      "displayZh": "斯洛伐克",
+      "targetValue": "Словакия"
+    },
+    {
+      "valueId": 90363,
+      "displayZh": "马达加斯加",
+      "targetValue": "Мадагаскар"
+    },
+    {
+      "valueId": 90364,
+      "displayZh": "哈萨克斯坦",
+      "targetValue": "Казахстан"
+    },
+    {
+      "valueId": 90365,
+      "displayZh": "突尼斯",
+      "targetValue": "Тунис"
+    },
+    {
+      "valueId": 90366,
+      "displayZh": "马里",
+      "targetValue": "Мали"
+    },
+    {
+      "valueId": 90367,
+      "displayZh": "吉布提",
+      "targetValue": "Джибути"
+    },
+    {
+      "valueId": 90368,
+      "displayZh": "贝宁",
+      "targetValue": "Бенин"
+    },
+    {
+      "valueId": 90369,
+      "displayZh": "柬埔寨",
+      "targetValue": "Камбоджа"
+    },
+    {
+      "valueId": 90370,
+      "displayZh": "立陶宛",
+      "targetValue": "Литва"
+    },
+    {
+      "valueId": 90371,
+      "displayZh": "莫桑比克",
+      "targetValue": "Мозамбик"
+    },
+    {
+      "valueId": 90372,
+      "displayZh": "冰岛",
+      "targetValue": "Исландия"
+    },
+    {
+      "valueId": 90373,
+      "displayZh": "古巴",
+      "targetValue": "Куба"
+    },
+    {
+      "valueId": 90374,
+      "displayZh": "德意志民主共和国",
+      "targetValue": "ГДР"
+    },
+    {
+      "valueId": 90375,
+      "displayZh": "牙买加",
+      "targetValue": "Ямайка"
+    },
+    {
+      "valueId": 90376,
+      "displayZh": "新加坡",
+      "targetValue": "Сингапур"
+    },
+    {
+      "valueId": 90377,
+      "displayZh": "南非",
+      "targetValue": "ЮАР"
+    },
+    {
+      "valueId": 90378,
+      "displayZh": "卢森堡",
+      "targetValue": "Люксембург"
+    },
+    {
+      "valueId": 90379,
+      "displayZh": "埃及",
+      "targetValue": "Египет"
+    },
+    {
+      "valueId": 90380,
+      "displayZh": "阿联酋",
+      "targetValue": "ОАЭ"
+    },
+    {
+      "valueId": 90381,
+      "displayZh": "格鲁吉亚",
+      "targetValue": "Грузия"
+    },
+    {
+      "valueId": 90382,
+      "displayZh": "几内亚共和国",
+      "targetValue": "Гвинейская Р-ка"
+    },
+    {
+      "valueId": 90383,
+      "displayZh": "秘鲁",
+      "targetValue": "Перу"
+    },
+    {
+      "valueId": 90384,
+      "displayZh": "科摩罗群岛",
+      "targetValue": "Коморские о-ва"
+    },
+    {
+      "valueId": 90385,
+      "displayZh": "斯里兰卡",
+      "targetValue": "Шри-Ланка"
+    },
+    {
+      "valueId": 90386,
+      "displayZh": "塞浦路斯",
+      "targetValue": "Кипр"
+    },
+    {
+      "valueId": 90387,
+      "displayZh": "卢旺达",
+      "targetValue": "Руанда"
+    },
+    {
+      "valueId": 90388,
+      "displayZh": "摩洛哥",
+      "targetValue": "Марокко"
+    },
+    {
+      "valueId": 90389,
+      "displayZh": "克罗地亚",
+      "targetValue": "Хорватия"
+    },
+    {
+      "valueId": 90390,
+      "displayZh": "摩纳哥",
+      "targetValue": "Монако"
+    },
+    {
+      "valueId": 90391,
+      "displayZh": "蒙古",
+      "targetValue": "Монголия"
+    },
+    {
+      "valueId": 90392,
+      "displayZh": "加蓬",
+      "targetValue": "Габон"
+    },
+    {
+      "valueId": 90393,
+      "displayZh": "刚果",
+      "targetValue": "Конго"
+    },
+    {
+      "valueId": 90394,
+      "displayZh": "尼泊尔",
+      "targetValue": "Непал"
+    },
+    {
+      "valueId": 90395,
+      "displayZh": "亚美尼亚",
+      "targetValue": "Армения"
+    },
+    {
+      "valueId": 90396,
+      "displayZh": "多哥",
+      "targetValue": "Того"
+    },
+    {
+      "valueId": 90397,
+      "displayZh": "叙利亚",
+      "targetValue": "Сирия"
+    },
+    {
+      "valueId": 90398,
+      "displayZh": "布隆迪",
+      "targetValue": "Бурунди"
+    },
+    {
+      "valueId": 90399,
+      "displayZh": "马拉维",
+      "targetValue": "Малави"
+    },
+    {
+      "valueId": 90400,
+      "displayZh": "乌拉圭",
+      "targetValue": "Уругвай"
+    },
+    {
+      "valueId": 90401,
+      "displayZh": "波斯尼亚和黑塞哥维那",
+      "targetValue": "Босния и Герцеговина"
+    },
+    {
+      "valueId": 90402,
+      "displayZh": "津巴布韦",
+      "targetValue": "Зимбабве"
+    },
+    {
+      "valueId": 90403,
+      "displayZh": "毛里求斯",
+      "targetValue": "Маврикий"
+    },
+    {
+      "valueId": 90404,
+      "displayZh": "阿塞拜疆",
+      "targetValue": "Азербайджан"
+    },
+    {
+      "valueId": 90405,
+      "displayZh": "洪都拉斯",
+      "targetValue": "Гондурас"
+    },
+    {
+      "valueId": 90406,
+      "displayZh": "安圭拉",
+      "targetValue": "Ангилья"
+    },
+    {
+      "valueId": 90407,
+      "displayZh": "智利",
+      "targetValue": "Чили"
+    },
+    {
+      "valueId": 90408,
+      "displayZh": "塔吉克斯坦",
+      "targetValue": "Таджикистан"
+    },
+    {
+      "valueId": 90409,
+      "displayZh": "直布罗陀",
+      "targetValue": "Гибралтар"
+    },
+    {
+      "valueId": 90410,
+      "displayZh": "列支敦士登",
+      "targetValue": "Лихтенштейн"
+    },
+    {
+      "valueId": 90411,
+      "displayZh": "老挝",
+      "targetValue": "Лаос"
+    },
+    {
+      "valueId": 90412,
+      "displayZh": "委内瑞拉",
+      "targetValue": "Венесуэла"
+    },
+    {
+      "valueId": 90413,
+      "displayZh": "马耳他",
+      "targetValue": "Мальта"
+    },
+    {
+      "valueId": 90414,
+      "displayZh": "赞比亚",
+      "targetValue": "Замбия"
+    },
+    {
+      "valueId": 90415,
+      "displayZh": "土库曼斯坦",
+      "targetValue": "Туркменистан"
+    },
+    {
+      "valueId": 90416,
+      "displayZh": "圣多美和普林西比",
+      "targetValue": "Сан-Томе и Принсипи"
+    },
+    {
+      "valueId": 90417,
+      "displayZh": "伊拉克",
+      "targetValue": "Ирак"
+    },
+    {
+      "valueId": 90418,
+      "displayZh": "尼日利亚",
+      "targetValue": "Нигерия"
+    },
+    {
+      "valueId": 90419,
+      "displayZh": "缅甸",
+      "targetValue": "Мьянма"
+    },
+    {
+      "valueId": 90420,
+      "displayZh": "留尼汪",
+      "targetValue": "Реюньон"
+    },
+    {
+      "valueId": 90421,
+      "displayZh": "黎巴嫩",
+      "targetValue": "Ливан"
+    },
+    {
+      "valueId": 90422,
+      "displayZh": "梵蒂冈",
+      "targetValue": "Ватикан"
+    },
+    {
+      "valueId": 90423,
+      "displayZh": "巴拉圭",
+      "targetValue": "Парагвай"
+    },
+    {
+      "valueId": 90424,
+      "displayZh": "肯尼亚",
+      "targetValue": "Кения"
+    },
+    {
+      "valueId": 90425,
+      "displayZh": "波多黎各",
+      "targetValue": "Пуэрто-Рико"
+    },
+    {
+      "valueId": 90426,
+      "displayZh": "沙特阿拉伯",
+      "targetValue": "Саудовская Аравия"
+    },
+    {
+      "valueId": 90427,
+      "displayZh": "苏里南",
+      "targetValue": "Суринам"
+    },
+    {
+      "valueId": 90428,
+      "displayZh": "阿富汗",
+      "targetValue": "Афганистан"
+    },
+    {
+      "valueId": 90429,
+      "displayZh": "不丹",
+      "targetValue": "Бутан"
+    },
+    {
+      "valueId": 90430,
+      "displayZh": "吉尔吉斯斯坦",
+      "targetValue": "Кыргызстан"
+    },
+    {
+      "valueId": 90431,
+      "displayZh": "圣马力诺",
+      "targetValue": "Сан-Марино"
+    },
+    {
+      "valueId": 90432,
+      "displayZh": "海地",
+      "targetValue": "Гаити"
+    },
+    {
+      "valueId": 90433,
+      "displayZh": "坦桑尼亚",
+      "targetValue": "Танзания"
+    },
+    {
+      "valueId": 90434,
+      "displayZh": "阿尔及利亚",
+      "targetValue": "Алжир"
+    },
+    {
+      "valueId": 90435,
+      "displayZh": "乌干达",
+      "targetValue": "Уганда"
+    },
+    {
+      "valueId": 90436,
+      "displayZh": "帕劳",
+      "targetValue": "Палау"
+    },
+    {
+      "valueId": 90437,
+      "displayZh": "圭亚那",
+      "targetValue": "Гайана"
+    },
+    {
+      "valueId": 90438,
+      "displayZh": "苏丹",
+      "targetValue": "Судан"
+    },
+    {
+      "valueId": 90439,
+      "displayZh": "阿尔巴尼亚",
+      "targetValue": "Албания"
+    },
+    {
+      "valueId": 90440,
+      "displayZh": "巴拿马",
+      "targetValue": "Панама"
+    },
+    {
+      "valueId": 90441,
+      "displayZh": "尼维斯",
+      "targetValue": "Невис"
+    },
+    {
+      "valueId": 90442,
+      "displayZh": "利比里亚",
+      "targetValue": "Либерия"
+    },
+    {
+      "valueId": 90443,
+      "displayZh": "尼加拉瓜",
+      "targetValue": "Никарагуа"
+    },
+    {
+      "valueId": 90444,
+      "displayZh": "库克群岛",
+      "targetValue": "Кука о-ва"
+    },
+    {
+      "valueId": 90445,
+      "displayZh": "几内亚比绍",
+      "targetValue": "Гвинея-Бисау"
+    },
+    {
+      "valueId": 90446,
+      "displayZh": "索马里",
+      "targetValue": "Сомали"
+    },
+    {
+      "valueId": 90447,
+      "displayZh": "赤道几内亚",
+      "targetValue": "Экваториальная Гвинея"
+    },
+    {
+      "valueId": 90448,
+      "displayZh": "厄立特里亚",
+      "targetValue": "Эритрея"
+    },
+    {
+      "valueId": 90449,
+      "displayZh": "格林纳达",
+      "targetValue": "Гренада"
+    },
+    {
+      "valueId": 90450,
+      "displayZh": "多米尼加共和国",
+      "targetValue": "Доминиканская Республика"
+    },
+    {
+      "valueId": 90451,
+      "displayZh": "塞拉利昂",
+      "targetValue": "Сьерра-Леоне"
+    },
+    {
+      "valueId": 90452,
+      "displayZh": "卡塔尔",
+      "targetValue": "Катар"
+    },
+    {
+      "valueId": 90453,
+      "displayZh": "冈比亚",
+      "targetValue": "Гамбия"
+    },
+    {
+      "valueId": 90454,
+      "displayZh": "玻利维亚",
+      "targetValue": "Боливия"
+    },
+    {
+      "valueId": 90455,
+      "displayZh": "斐济",
+      "targetValue": "Фиджи"
+    },
+    {
+      "valueId": 90456,
+      "displayZh": "美属萨摩亚",
+      "targetValue": "Американское Самоа"
+    },
+    {
+      "valueId": 90457,
+      "displayZh": "哥斯达黎加",
+      "targetValue": "Коста Рика"
+    },
+    {
+      "valueId": 90458,
+      "displayZh": "也门",
+      "targetValue": "Йемен"
+    },
+    {
+      "valueId": 90459,
+      "displayZh": "佛得角",
+      "targetValue": "Кабо Верде"
+    },
+    {
+      "valueId": 90460,
+      "displayZh": "危地马拉",
+      "targetValue": "Гватемала"
+    },
+    {
+      "valueId": 90461,
+      "displayZh": "塞内加尔",
+      "targetValue": "Сенегал"
+    },
+    {
+      "valueId": 90462,
+      "displayZh": "特立尼达和多巴哥",
+      "targetValue": "Тринидад и Тобаго"
+    },
+    {
+      "valueId": 90463,
+      "displayZh": "斯威士兰",
+      "targetValue": "Свазиленд"
+    },
+    {
+      "valueId": 90466,
+      "displayZh": "蒙特塞拉特",
+      "targetValue": "Монтсеррат"
+    },
+    {
+      "valueId": 90467,
+      "displayZh": "根西",
+      "targetValue": "Гернси"
+    },
+    {
+      "valueId": 90468,
+      "displayZh": "阿曼",
+      "targetValue": "Оман"
+    },
+    {
+      "valueId": 90469,
+      "displayZh": "加纳",
+      "targetValue": "Гана"
+    },
+    {
+      "valueId": 90470,
+      "displayZh": "福克兰群岛",
+      "targetValue": "Фолклендские о-ва"
+    },
+    {
+      "valueId": 90471,
+      "displayZh": "所罗门群岛",
+      "targetValue": "Соломоновы о-ва"
+    },
+    {
+      "valueId": 90472,
+      "displayZh": "埃塞俄比亚",
+      "targetValue": "Эфиопия"
+    },
+    {
+      "valueId": 90473,
+      "displayZh": "西萨摩亚",
+      "targetValue": "Западное Самоа"
+    },
+    {
+      "valueId": 90474,
+      "displayZh": "基里巴斯共和国",
+      "targetValue": "Кирибати, Р-ка"
+    },
+    {
+      "valueId": 90475,
+      "displayZh": "厄瓜多尔",
+      "targetValue": "Эквадор"
+    },
+    {
+      "valueId": 90476,
+      "displayZh": "莱索托",
+      "targetValue": "Лесото"
+    },
+    {
+      "valueId": 90477,
+      "displayZh": "博茨瓦纳",
+      "targetValue": "Ботсвана"
+    },
+    {
+      "valueId": 90478,
+      "displayZh": "安哥拉",
+      "targetValue": "Ангола"
+    },
+    {
+      "valueId": 90479,
+      "displayZh": "巴哈马群岛",
+      "targetValue": "Багамские о-ва"
+    },
+    {
+      "valueId": 90480,
+      "displayZh": "塞舌尔",
+      "targetValue": "Сейшельские о-ва"
+    },
+    {
+      "valueId": 90481,
+      "displayZh": "巴布亚新几内亚",
+      "targetValue": "Папуа Новая Гвинея"
+    },
+    {
+      "valueId": 90482,
+      "displayZh": "塞班岛",
+      "targetValue": "Сайпан"
+    },
+    {
+      "valueId": 90483,
+      "displayZh": "毛里塔尼亚",
+      "targetValue": "Мавритания"
+    },
+    {
+      "valueId": 90484,
+      "displayZh": "利比亚",
+      "targetValue": "Ливия"
+    },
+    {
+      "valueId": 90485,
+      "displayZh": "纳米比亚",
+      "targetValue": "Намибия"
+    },
+    {
+      "valueId": 90486,
+      "displayZh": "巴巴多斯",
+      "targetValue": "Барбадос"
+    },
+    {
+      "valueId": 90487,
+      "displayZh": "喀麦隆",
+      "targetValue": "Камерун"
+    },
+    {
+      "valueId": 90488,
+      "displayZh": "汤加",
+      "targetValue": "Тонга"
+    },
+    {
+      "valueId": 90489,
+      "displayZh": "法罗群岛",
+      "targetValue": "Фарерские о-ва"
+    },
+    {
+      "valueId": 90490,
+      "displayZh": "伯利兹",
+      "targetValue": "Белиз"
+    },
+    {
+      "valueId": 90491,
+      "displayZh": "马尔代夫群岛",
+      "targetValue": "Мальдивские о-ва"
+    },
+    {
+      "valueId": 90492,
+      "displayZh": "澳门",
+      "targetValue": "Макао"
+    },
+    {
+      "valueId": 90493,
+      "displayZh": "多米尼加",
+      "targetValue": "Доминика"
+    },
+    {
+      "valueId": 90494,
+      "displayZh": "尼日尔",
+      "targetValue": "Нигер"
+    },
+    {
+      "valueId": 90495,
+      "displayZh": "圣文森特",
+      "targetValue": "Сент-Винсент"
+    },
+    {
+      "valueId": 90496,
+      "displayZh": "关岛",
+      "targetValue": "Гуам"
+    },
+    {
+      "valueId": 90497,
+      "displayZh": "英属维尔京群岛",
+      "targetValue": "Виргинские о-ва, Брит."
+    },
+    {
+      "valueId": 90498,
+      "displayZh": "瓜德罗普",
+      "targetValue": "Гваделупа"
+    },
+    {
+      "valueId": 90499,
+      "displayZh": "博奈尔",
+      "targetValue": "Бонер"
+    },
+    {
+      "valueId": 90500,
+      "displayZh": "科威特",
+      "targetValue": "Кувейт"
+    },
+    {
+      "valueId": 90501,
+      "displayZh": "塔希提",
+      "targetValue": "Таити"
+    },
+    {
+      "valueId": 90502,
+      "displayZh": "特克斯和凯科斯群岛",
+      "targetValue": "Теркс и Кайкос"
+    },
+    {
+      "valueId": 90503,
+      "displayZh": "格陵兰",
+      "targetValue": "Гренландия"
+    },
+    {
+      "valueId": 90504,
+      "displayZh": "圣卢西亚",
+      "targetValue": "Сент-Люсия"
+    },
+    {
+      "valueId": 90505,
+      "displayZh": "巴林",
+      "targetValue": "Бахрейн"
+    },
+    {
+      "valueId": 90506,
+      "displayZh": "图瓦卢",
+      "targetValue": "Тувалу"
+    },
+    {
+      "valueId": 90507,
+      "displayZh": "瓦努阿图",
+      "targetValue": "Вануату"
+    },
+    {
+      "valueId": 90508,
+      "displayZh": "阿鲁巴",
+      "targetValue": "Аруба"
+    },
+    {
+      "valueId": 90509,
+      "displayZh": "新喀里多尼亚",
+      "targetValue": "Новая Каледония"
+    },
+    {
+      "valueId": 90510,
+      "displayZh": "泽西",
+      "targetValue": "Джерси"
+    },
+    {
+      "valueId": 90511,
+      "displayZh": "文莱",
+      "targetValue": "Бруней"
+    },
+    {
+      "valueId": 90512,
+      "displayZh": "布基纳法索",
+      "targetValue": "Буркина-Фасо"
+    },
+    {
+      "valueId": 90513,
+      "displayZh": "安提瓜和巴布达",
+      "targetValue": "Антигуа и Барбуда"
+    },
+    {
+      "valueId": 90514,
+      "displayZh": "东南亚",
+      "targetValue": "ЮВА"
+    },
+    {
+      "valueId": 90515,
+      "displayZh": "安道尔",
+      "targetValue": "Андорра"
+    },
+    {
+      "valueId": 90516,
+      "displayZh": "开曼群岛",
+      "targetValue": "Кайманские о-ва"
+    },
+    {
+      "valueId": 90517,
+      "displayZh": "加那利群岛",
+      "targetValue": "Канарские о-ва"
+    },
+    {
+      "valueId": 90518,
+      "displayZh": "纽埃",
+      "targetValue": "Ниуэ о-в"
+    },
+    {
+      "valueId": 90519,
+      "displayZh": "瑙鲁",
+      "targetValue": "Науру"
+    },
+    {
+      "valueId": 90520,
+      "displayZh": "刚果民主共和国",
+      "targetValue": "Конго, Демократич. р-ка"
+    },
+    {
+      "valueId": 90521,
+      "displayZh": "库拉索",
+      "targetValue": "Кюрасао"
+    },
+    {
+      "valueId": 90522,
+      "displayZh": "马绍尔群岛",
+      "targetValue": "Маршалловы о-ва"
+    },
+    {
+      "valueId": 90523,
+      "displayZh": "马提尼克",
+      "targetValue": "Мартиника"
+    },
+    {
+      "valueId": 90524,
+      "displayZh": "美属维尔京群岛",
+      "targetValue": "Виргинские о-ва, США"
+    },
+    {
+      "valueId": 90525,
+      "displayZh": "圣尤斯特歇斯",
+      "targetValue": "Сент-Юстас"
+    },
+    {
+      "valueId": 90526,
+      "displayZh": "法属圭亚那",
+      "targetValue": "Французская Гвиана"
+    },
+    {
+      "valueId": 90527,
+      "displayZh": "百慕大",
+      "targetValue": "Бермудские о-ва"
+    },
+    {
+      "valueId": 90528,
+      "displayZh": "马洛岛",
+      "targetValue": "Св. Бартоломью"
+    },
+    {
+      "valueId": 90529,
+      "displayZh": "萨尔瓦多",
+      "targetValue": "Сальвадор"
+    },
+    {
+      "valueId": 90530,
+      "displayZh": "圣基茨",
+      "targetValue": "Сент-Китс"
+    },
+    {
+      "valueId": 90531,
+      "displayZh": "圣马丁岛",
+      "targetValue": "Сен-Мартен"
+    },
+    {
+      "valueId": 90532,
+      "displayZh": "阿布哈兹",
+      "targetValue": "Абхазия"
+    },
+    {
+      "valueId": 90533,
+      "displayZh": "英国",
+      "targetValue": "Англия"
+    },
+    {
+      "valueId": 90534,
+      "displayZh": "缅甸",
+      "targetValue": "Бирма"
+    },
+    {
+      "valueId": 90535,
+      "displayZh": "扎伊尔",
+      "targetValue": "Заир"
+    },
+    {
+      "valueId": 90536,
+      "displayZh": "西欧",
+      "targetValue": "Западная Европа"
+    },
+    {
+      "valueId": 90539,
+      "displayZh": "朝鲜民主主义人民共和国",
+      "targetValue": "КНДР"
+    },
+    {
+      "valueId": 90540,
+      "displayZh": "马拉扎济",
+      "targetValue": "Малагази"
+    },
+    {
+      "valueId": 90541,
+      "displayZh": "荷属安的列斯",
+      "targetValue": "Нидерландские Антиллы"
+    },
+    {
+      "valueId": 90542,
+      "displayZh": "德涅斯特河沿岸摩尔达维亚共和国",
+      "targetValue": "Приднестровская Молдавская Республика"
+    },
+    {
+      "valueId": 90544,
+      "displayZh": "索马里兰",
+      "targetValue": "Сомалиленд"
+    },
+    {
+      "valueId": 90545,
+      "displayZh": "特里斯坦-达库尼亚",
+      "targetValue": "Тристан-да-Кунья"
+    },
+    {
+      "valueId": 90546,
+      "displayZh": "中非共和国",
+      "targetValue": "ЦАР"
+    },
+    {
+      "valueId": 90547,
+      "displayZh": "锡兰",
+      "targetValue": "Цейлон"
+    },
+    {
+      "valueId": 90548,
+      "displayZh": "黑山",
+      "targetValue": "Черногория"
+    },
+    {
+      "valueId": 90549,
+      "displayZh": "苏格兰",
+      "targetValue": "Шотландия"
+    },
+    {
+      "valueId": 90550,
+      "displayZh": "南苏丹",
+      "targetValue": "Южный Судан"
+    },
+    {
+      "valueId": 970638339,
+      "displayZh": "独联体",
+      "targetValue": "СНГ"
+    },
+    {
+      "valueId": 970638356,
+      "displayZh": "吉尔吉斯共和国",
+      "targetValue": "Кыргызская Республика"
+    },
+    {
+      "valueId": 970638360,
+      "displayZh": "摩尔多瓦共和国",
+      "targetValue": "Республика Молдова"
+    },
+    {
+      "valueId": 971010186,
+      "displayZh": "吉尔吉斯斯坦",
+      "targetValue": "Киргизия"
+    },
+    {
+      "valueId": 971284448,
+      "displayZh": "南奥塞梯",
+      "targetValue": "Южная Осетия"
+    },
+    {
+      "valueId": 971306472,
+      "displayZh": "中非共和國",
+      "targetValue": "Центральноафриканская Республика"
+    },
+    {
+      "valueId": 972060023,
+      "displayZh": "古罗马",
+      "targetValue": "Древний Рим"
+    },
+    {
+      "valueId": 972088178,
+      "displayZh": "密克罗尼西亚",
+      "targetValue": "Микронезия"
+    },
+    {
+      "valueId": 972088184,
+      "displayZh": "巴勒斯坦",
+      "targetValue": "Палестина"
+    },
+    {
+      "valueId": 972088185,
+      "displayZh": "皮特凯恩",
+      "targetValue": "Питкэрн"
+    },
+    {
+      "valueId": 972088188,
+      "displayZh": "圣巴泰勒米",
+      "targetValue": "Сен-Бартелеми"
+    },
+    {
+      "valueId": 972088189,
+      "displayZh": "圣皮埃尔和密克隆",
+      "targetValue": "Сен-Пьер и Микелон"
+    },
+    {
+      "valueId": 972088191,
+      "displayZh": "瓦利斯和富图纳",
+      "targetValue": "Уоллис и Футуна"
+    },
+    {
+      "valueId": 972088193,
+      "displayZh": "南非",
+      "targetValue": "Южная Африка"
+    },
+    {
+      "valueId": 972088209,
+      "displayZh": "荷兰加勒比区",
+      "targetValue": "Бонэйр, Синт-Эстатиус и Саба"
+    },
+    {
+      "valueId": 972088210,
+      "displayZh": "东帝汶",
+      "targetValue": "Восточный Тимор"
+    },
+    {
+      "valueId": 972088213,
+      "displayZh": "几内亚",
+      "targetValue": "Гвинея"
+    }
+  ]
+}
