@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -10,10 +10,5 @@
     <ProjectReference Include="..\AutoMagic.Contracts\AutoMagic.Contracts.csproj" />
     <ProjectReference Include="..\AutoMagic.Domain\AutoMagic.Domain.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="..\..\docs\ai-mapping\product-mapping-v2-prompt.txt"
-                      LogicalName="AutoMagic.AiMapping.product-mapping-v2-prompt.txt" />
-    <EmbeddedResource Include="..\..\docs\ai-mapping\product-mapping-response.v2.schema.json"
-                      LogicalName="AutoMagic.AiMapping.product-mapping-response.v2.schema.json" />
-  </ItemGroup>
+
 </Project>

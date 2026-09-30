@@ -18,6 +18,110 @@ async Task<RuleReviewSession> Open(string offer, long type = 200) => await servi
 RuleReviewRow Color(RuleReviewSession s) => s.Rows.Single(r => r.Attribute.AttributeId == 20);
 
 var session = await Open("first");
+var originFile = JsonSerializer.Deserialize<FieldBindingFile>(File.ReadAllText(
+    Path.Combine(Directory.GetCurrentDirectory(), "rules", "categories", "200000933", "types", "93182.bindings.json")),
+    ProductMappingJson.StrictOptions)!;
+var originBinding = originFile.Attributes.Single(b => b.Id == 4389);
+FieldBindingRow Origin(params (string Label, string Value)[] facts)
+{
+    var input = Input("origin-check",200);
+    input = input with {
+        Source = input.Source with { Facts = facts.Select((f,i) =>
+            new FieldMatchingSourceFact("origin"+i, "attribute", f.Label, f.Value, "detail", "$.facts["+i+"]")).ToArray() },
+        Target = input.Target with { Attributes = [new(4389,0,"原产国","","String","",false,true,1,123)] }
+    };
+    return FieldBindingPreview.Create(input, [originBinding]).Single();
+}
+Check(new[] { "广州", "深圳", "东莞", "汕头", "杭州" }.All(city =>
+    Origin(("产地", city + "市")).InputText == "中国"), "Configured origin regions match substrings in city names");
+Check(Origin(("产地","广州广东")).InputText == "中国" &&
+      Origin(("产地","广州广东")).Resolution == "condition",
+    "Origin contains matching accepts the configured city inside a longer source value");
+var fullOrigin = Origin(("原产国","广东省广州市白云区"));
+Check(fullOrigin.InputText == "中国" && fullOrigin.Resolution == "condition" &&
+      fullOrigin.SourceValues == "广东省广州市白云区" && !fullOrigin.Reviewed,
+    "Origin substring conversion preserves evidence and requires confirmation");
+Check(Origin().InputText == "中国" && Origin().Resolution == "fallback" && Origin().FactIds.Length == 0,
+    "Missing origin uses explicit China fallback without fabricating evidence");
+Check(Origin(("产地","浙江")).InputText == "中国" && Origin(("产地","浙江")).Resolution == "fallback" &&
+      Origin(("原产国","日本")).InputText == "中国",
+    "Unlisted nonempty origins use the configured China fallback");
+Check(Origin(("原产国","日本"),("产地","广州")).InputText == "中国" &&
+      Origin(("产地","广州"),("产地","深圳")).InputText == "中国",
+    "Competing origin facts use the configured China fallback");
+Check(Origin(("备注","广州")).Resolution == "fallback",
+    "Origin conditions do not match unrelated source labels");
+var conditionRule = new FieldBinding(20, "颜色", Conditions: [new("颜色", "equals", "酒红色", "条件结果")], FallbackValue: "兜底结果");
+var conditionHit = FieldBindingPreview.Create(Input("condition-hit",200), [conditionRule]).Single();
+Check(conditionHit.InputText == "条件结果" && conditionHit.Resolution == "condition" && !conditionHit.Reviewed,
+    "Exact condition hit produces a reviewable result");
+var conditionMiss = FieldBindingPreview.Create(Input("condition-miss",200),
+    [conditionRule with { Conditions = [new("颜色", "equals", "无袖", "无袖连衣裙")] }]).Single();
+var conditionMissing = FieldBindingPreview.Create(Input("condition-missing",200),
+    [conditionRule with { Conditions = [new("袖型", "equals", "无袖", "无袖连衣裙")] }]).Single();
+Check(conditionMiss.InputText == "兜底结果" && conditionMissing.InputText == "兜底结果" &&
+      conditionMissing.Resolution == "fallback" && conditionMissing.UsedDefault,
+    "Explicit condition fallback covers nonmatching and missing source facts");
+var conditionInvalid = FieldBindingPreview.Create(Input("condition-invalid",200),
+    [conditionRule with { Id = 999 }]).Single();
+Check(conditionInvalid.InputText == "" && !conditionInvalid.SchemaValid,
+    "Conditional fallback cannot bypass Schema validation");
+try {
+    FieldBindingPreview.Create(Input("condition-operator",200),
+        [conditionRule with { Conditions = [new("颜色", "regex", "红", "红色")] }]);
+    throw new Exception("Expected invalid operator rejection");
+} catch (InvalidDataException) { Check(true, "Unknown condition operators are rejected"); }
+var schemaCacheRoot = Path.Combine(root, "schema-cache");
+var schemaCache = new AutoMagic.Infrastructure.Ozon.OzonSchemaCache(schemaCacheRoot);
+var cachedSchema = new OzonCategorySchema(100, 200, DateTimeOffset.UtcNow,
+    [new(20, 0, "颜色", "", "String", false, true, 300, 1, "")]);
+schemaCache.Save(cachedSchema);
+Check(new AutoMagic.Infrastructure.Ozon.OzonSchemaCache(schemaCacheRoot).Load(100,200)?.Attributes[0].DictionaryId == 300 &&
+      schemaCache.Load(100,201) is null && schemaCache.Load(101,200) is null,
+    "Schema cache survives restart and isolates category/type");
+File.WriteAllText(Path.Combine(schemaCacheRoot,"100","200.zh-Hans.json"), "{}");
+try { schemaCache.Load(100,200); throw new Exception("Expected invalid cache rejection"); }
+catch (InvalidDataException) { Check(true, "Invalid Schema cache is rejected"); }
+schemaCache.Save(cachedSchema);
+Check(schemaCache.Load(100,200)?.CapturedAt == cachedSchema.CapturedAt, "Manual refresh replaces damaged cache and preserves capture time");
+var defaults = FieldBindingPreview.Create(Input("defaults",200),
+    [new(20, "颜色", ["颜色"], "默认颜色"), new(10, "材质", ["不存在"], "默认材质")]);
+Check(defaults[0].InputText == "酒红色" && !defaults[0].UsedDefault &&
+      defaults[1].InputText == "默认材质" && defaults[1].UsedDefault && !defaults[1].Reviewed,
+    "Explicit defaults only fill missing sources and still require human review");
+var defaultConflict = FieldBindingPreview.Create(Input("default-conflict",200),
+    [new(20, "颜色", ["颜色", "材质"], "默认颜色")]);
+Check(defaultConflict[0].InputText == "" && !defaultConflict[0].UsedDefault,
+    "Defaults do not replace conflicting source values");
+var previewRows = FieldBindingPreview.Create(Input("binding-preview",200),
+    [new(20, "颜色", ["颜色"]), new(10, "材质", ["猜测"]), new(999, "无效字段", ["颜色"])]);
+Check(previewRows[0].InputText == "酒红色" && previewRows[0].ScopeKeys.SequenceEqual(["product"]),
+    "Field preview keeps one shared product value without dictionary resolution");
+Check(previewRows[1].InputText == "" && !previewRows[2].SchemaValid && previewRows[2].InputText == "",
+    "Field preview excludes uncertain facts and blocks attributes absent from Schema");
+var requiredOnlyInput = Input("required-only",200) with {
+    Target = Input("required-only",200).Target with { Attributes = [
+        new(20,0,"颜色","","String","",false,true,1,300),
+        new(10,0,"材质","","String","",false,false,1,0),
+        new(8292,0,"合并至一张卡片","","String","",false,true,0,0)
+    ] }
+};
+var requiredOnly = FieldBindingPreview.CreateRequired(requiredOnlyInput,
+    [new(20,"颜色",["颜色"]), new(10,"材质",["材质"])]);
+Check(requiredOnly.Count == 2 && requiredOnly.All(row => row.AttributeId != 10) &&
+      requiredOnly.Single(row => row.AttributeId == 20).InputText == "酒红色",
+    "Required-only preview excludes optional bindings");
+var unconfiguredRequired = requiredOnly.Single(row => row.AttributeId == 8292);
+Check(unconfiguredRequired.InputText == "" && unconfiguredRequired.SchemaValid &&
+      unconfiguredRequired.Resolution == "unresolved" && unconfiguredRequired.Status.Contains("未配置映射"),
+    "Unconfigured required attributes remain visible and blank for human input");
+var conflictPreview = FieldBindingPreview.Create(Input("binding-conflict",200), [new(20, "颜色", ["颜色", "材质"])]);
+Check(conflictPreview.Single().InputText == "" && conflictPreview.Single().SourceValues.Contains("棉"),
+    "Multiple distinct source values remain visible without selecting an answer");
+try {
+    FieldBindingPreview.Create(Input("duplicate-binding",200), [new(20, "颜色", ["颜色"]), new(20, "颜色", ["材质"])]);
+    throw new Exception("Expected duplicate binding rejection");
+} catch (InvalidDataException) { Check(true, "Duplicate target bindings are rejected"); }
 Check(session.Rows.All(r => r.InputText == "" && r.SelectedCandidate is null), "Empty catalog leaves targets blank");
 Check(session.Rows.All(r => r.Facts.All(f => f.Label != "猜测")), "Uncertain cleaned facts do not enter form evidence");
 var color = Color(session); color.InputText = "酒红色"; color.Reviewed = true;
@@ -111,6 +215,11 @@ skuInput=skuInput with {Source=skuInput.Source with {SkuCombinations=[
     new("s", "verified",new Dictionary<string,string?>{{"尺码","S"}},null,null){SkuId="s"},
     new("m", "verified",new Dictionary<string,string?>{{"尺码","M"}},null,null){SkuId="m"}]}};
 var skuSession=await service.OpenAsync(skuInput,credentials,token);
+var groupedPreview = FieldBindingPreview.Create(skuInput, [new(20, "颜色", ["颜色"]), new(10, "材质", ["尺码"])]);
+Check(groupedPreview.Count(r => r.AttributeId == 20) == 1 &&
+      groupedPreview.Count(r => r.AttributeId == 10) == 2 &&
+      groupedPreview.Where(r => r.AttributeId == 10).All(r => r.ScopeKeys.Length == 1),
+    "Field preview shows product facts once and separates differing SKU values");
 var skuColors=skuSession.Rows.Where(r=>r.Attribute.AttributeId==20).ToArray();
 for(var i=0;i<skuColors.Length;i++)
 {

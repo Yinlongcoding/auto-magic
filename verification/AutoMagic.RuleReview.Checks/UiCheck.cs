@@ -22,10 +22,10 @@ static class UiCheck
             try
             {
                 var vm = new MainViewModel(Stub<ISearchBridge>(), Stub<IExchangeRateService>(), Stub<IOzonSchemaService>(),
-                    Stub<ILocalOzonCategoryCatalog>(), Stub<IOzonTestSettingsStore>(), Stub<IQwenTestSettingsStore>(),
+                    Stub<ILocalOzonCategoryCatalog>(), Stub<IOzonTestSettingsStore>(),
                     new CollectionSnapshotStore(Path.Combine(root,"collections")), service);
-                foreach (var row in session.Rows) vm.ReviewRows.Add(row);
-                vm.SelectedReviewRow = vm.ReviewRows[0];
+                vm.BindingRows.Add(new FieldBindingRow { AttributeId = 20, Name = "颜色", ScopeKeys = ["product"], SourceValues = "酒红色", InputText = "酒红色", SchemaValid = true });
+
                 vm.IsPricingExpanded=false;
                 vm.SelectedFieldMatchingTabIndex=0;
                 vm.ReviewStatus = "完善中文填写，勾选已核对，然后确认解析并保存规则。";
@@ -33,12 +33,12 @@ static class UiCheck
                 var tab = Descendants(window).OfType<TabItem>().Single(t=>Equals(t.Header,"字段匹配"));
                 tab.IsSelected=true;
                 window.Measure(new Size(1280,900)); window.Arrange(new Rect(0,0,1280,900)); window.UpdateLayout();
-                var form = Descendants(tab).OfType<TabItem>().Single(t=>Equals(t.Header,"匹配与人工填写"));
+                var form = Descendants(tab).OfType<TabItem>().Single(t=>Equals(t.Header,"初步方案与人工确认"));
                 form.IsSelected=true; window.UpdateLayout();
                 var grid=Descendants(form).OfType<DataGrid>().Single();
                 window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                 grid.GetBindingExpression(ItemsControl.ItemsSourceProperty)?.UpdateTarget();
-                if(grid.IsReadOnly || !ReferenceEquals(grid.ItemsSource,vm.ReviewRows)) throw new Exception($"Form binding failed: readonly={grid.IsReadOnly}, context={grid.DataContext?.GetType().Name}, items={grid.ItemsSource?.GetType().Name}");
+                if(grid.IsReadOnly || !ReferenceEquals(grid.ItemsSource,vm.BindingRows)) throw new Exception($"Form binding failed: readonly={grid.IsReadOnly}, context={grid.DataContext?.GetType().Name}, items={grid.ItemsSource?.GetType().Name}");
                 var content=(FrameworkElement)window.Content;
                 if(content is Panel panel) panel.Background=window.Background;
                 window.Content=null;

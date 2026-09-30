@@ -16,12 +16,11 @@ public partial class MainViewModel
     [ObservableProperty] private string _reviewStatus = "请先运行规则匹配。";
     [ObservableProperty] private bool _isReviewBusy;
     [ObservableProperty] private bool _isPricingExpanded = true;
-    public bool IsReviewEditable => !IsReviewBusy && !IsRunningQwenMapping;
+    public bool IsReviewEditable => !IsReviewBusy && !IsRunningRuleMapping;
     partial void OnIsReviewBusyChanged(bool value)
     {
         OnPropertyChanged(nameof(IsReviewEditable));
         RunRuleMappingCommand.NotifyCanExecuteChanged();
-        RunQwenMappingCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand]

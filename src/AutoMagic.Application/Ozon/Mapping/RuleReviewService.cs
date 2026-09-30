@@ -305,7 +305,7 @@ public sealed class RuleReviewService(IRuleReviewStore store, IOzonDictionarySer
             throw new InvalidOperationException("表单未通过校验：" + string.Join("；", validation.Issues.Where(i => i.Severity == "error").Select(i => i.Message).Distinct()));
         token.ThrowIfCancellationRequested();
         var file = current.TypeFile with { Rules = typeRules.Values.OrderBy(r => r.RuleId, StringComparer.Ordinal).ToArray() };
-        store.Commit(new(q.DescriptionCategoryId, q.TypeId, current.Token, file, session.DraftKey, SerializeDraft(session, new(request, response, validation, [])), audits));
+        store.Commit(new(q.DescriptionCategoryId, q.TypeId, current.Token, file, session.DraftKey, SerializeDraft(session, new(request, response, validation)), audits));
         var savedBundle = store.Load(q.DescriptionCategoryId, q.TypeId);
         foreach (var row in session.Rows.Where(r => r.Status == "已解析，待保存"))
         {
@@ -323,7 +323,7 @@ public sealed class RuleReviewService(IRuleReviewStore store, IOzonDictionarySer
             row.OriginalMappingKey = rule is null || value is null ? null : ValueKey(q, rule, value);
             row.Statistics = row.OriginalMappingKey is null ? "仅当前商品" : "值 " + store.Counts(row.OriginalMappingKey).Display;
         }
-        return new(new(request, response, validation, []), writes.Count, unresolved,
+        return new(new(request, response, validation), writes.Count, unresolved,
             $"已保存；本次处理 {writes.Count} 条值映射，{unresolved} 项未解决。未解决字段已保存填写进度，可选择候选后再次确认。仍不直接上架。");
 
         string Sample(ReviewFact fact) => q.SourceOfferId + "/" + (fact.ScopeKey == "product" ? "product" : fact.ScopeKey) + "/" + Hash(fact.Label + "\0" + fact.Value);

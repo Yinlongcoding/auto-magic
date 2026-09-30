@@ -21,7 +21,6 @@ public partial class MainViewModel : ObservableObject
     private readonly IOzonSchemaService _ozonSchemaService;
     private readonly ILocalOzonCategoryCatalog _ozonCategoryCatalog;
     private readonly IOzonTestSettingsStore _ozonTestSettingsStore;
-    private readonly IQwenTestSettingsStore _qwenTestSettingsStore;
     private readonly CollectionSnapshotStore _collectionSnapshotStore;
     private readonly Dispatcher _dispatcher;
     private bool _initialized;
@@ -32,8 +31,6 @@ public partial class MainViewModel : ObservableObject
     private int _ozonSchemaRequestRevision;
     private CancellationTokenSource? _ozonSettingsSaveDebounce;
     private bool _isRestoringOzonSettings;
-    private CancellationTokenSource? _qwenSettingsSaveDebounce;
-    private bool _isRestoringQwenSettings;
     private FieldMatchingInput? _latestFieldMatchingInput;
     private CancellationTokenSource? _ruleMappingCancellation;
 
@@ -125,22 +122,13 @@ public partial class MainViewModel : ObservableObject
     private string _ozonSchemaJson = "尚未读取 Ozon Schema。";
 
     [ObservableProperty]
-    private string _qwenApiKey = string.Empty;
+    private bool _isRunningRuleMapping;
 
     [ObservableProperty]
-    private bool _isRunningQwenMapping;
+    private string _ruleMappingStatus = "准备 Ozon Schema 和 1688 详情后可预览输入 JSON。";
 
     [ObservableProperty]
-    private string _qwenMappingStatus = "AI 调用已暂停；准备 Ozon Schema 和 1688 详情后可预览输入 JSON。";
-
-    [ObservableProperty]
-    private string _qwenRequestJson = "尚未生成Qwen映射请求。";
-
-    [ObservableProperty]
-    private string _qwenRawResponseJson = "AI 调用已暂停。";
-
-    [ObservableProperty]
-    private string _qwenDictionaryStatus = "AI 调用已暂停；当前不查询字典。";
+    private string _ruleDictionaryStatus = "当前不查询字典。";
 
     [ObservableProperty]
     private DetailCollectionResultDto? _selectedFieldMatchingDetail;
@@ -155,7 +143,7 @@ public partial class MainViewModel : ObservableObject
     private string _cleanedProductJson = "选择一个已采集的商品以查看数据清洗结果。";
 
     [ObservableProperty]
-    private int _selectedFieldMatchingTabIndex = 4;
+    private int _selectedFieldMatchingTabIndex = 0;
 
     [ObservableProperty]
     private string _fieldMatchingFinalOutputJson = "尚未生成统一最终输出。";
@@ -172,7 +160,6 @@ public partial class MainViewModel : ObservableObject
         IOzonSchemaService ozonSchemaService,
         ILocalOzonCategoryCatalog ozonCategoryCatalog,
         IOzonTestSettingsStore ozonTestSettingsStore,
-        IQwenTestSettingsStore qwenTestSettingsStore,
         CollectionSnapshotStore collectionSnapshotStore,
         RuleReviewService ruleReviewService)
     {
@@ -181,7 +168,6 @@ public partial class MainViewModel : ObservableObject
         _ozonSchemaService = ozonSchemaService;
         _ozonCategoryCatalog = ozonCategoryCatalog;
         _ozonTestSettingsStore = ozonTestSettingsStore;
-        _qwenTestSettingsStore = qwenTestSettingsStore;
         _collectionSnapshotStore = collectionSnapshotStore;
         _ruleReviewService = ruleReviewService;
         _dispatcher = Dispatcher.CurrentDispatcher;
@@ -206,11 +192,6 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<ProductMappingIssue> ProductMappingIssues { get; } = [];
     public ObservableCollection<ProductSkuIdentityPlanItem> ProductSkuIdentityRows { get; } = [];
 
-    public string QwenModelId => QwenMappingRuntime.ModelId;
-
-    public string QwenRuntimeDescription =>
-        $"{QwenMappingRuntime.Provider} · {QwenMappingRuntime.RegionDisplayName} · 非思考模式 · JSON Schema";
-
     public IReadOnlyList<ProductSortOption> SortOptions { get; } =
     [
         new(ProductSortModes.Sales, "销量优先"),
@@ -226,7 +207,7 @@ public partial class MainViewModel : ObservableObject
 
         _initialized = true;
         await Task.WhenAll(RefreshExchangeRatesAsync(), LoadOzonCatalogAsync());
-        await Task.WhenAll(RestoreOzonTestSettingsAsync(), RestoreQwenTestSettingsAsync());
+        await RestoreOzonTestSettingsAsync();
         await RestoreLatestCollectionAsync();
     }
 
@@ -255,7 +236,7 @@ public partial class MainViewModel : ObservableObject
         FieldMatchingProducts.Clear();
         SelectedFieldMatchingDetail = null;
         ClearFieldMatchingPreview("正在等待新的详情采集结果。");
-        ResetQwenMappingOutput("正在等待新的1688详情事实。");
+        ResetRuleMappingOutput("正在等待新的1688详情事实。");
 
         try
         {
@@ -323,8 +304,7 @@ public partial class MainViewModel : ObservableObject
         _latestDetailSnapshot = CreateDetailSnapshot(SelectedFieldMatchingDetail, result.CapturedAt)
             ?? (_latestDetailResults.Count == 0 ? result.DetailSnapshot : null);
         RefreshFieldMatchingInput();
-        RefreshQwenReadinessStatus();
-        RunQwenMappingCommand.NotifyCanExecuteChanged();
+        RefreshRuleReadinessStatus();
         RunRuleMappingCommand.NotifyCanExecuteChanged();
     }
 
@@ -387,9 +367,18 @@ public partial class MainViewModel : ObservableObject
             OzonSchemaJson = JsonSerializer.Serialize(_ozonSchema, BridgeJson.IndentedOptions);
             OzonSchemaStatus =
                 $"凭证验证成功：{selectedCategory.DisplayName} > {selectedType.Name}；读取 {_ozonSchema.Attributes.Count} 个属性，其中必填 {_ozonSchema.RequiredCount} 个。";
+            try
+            {
+                _schemaCache.Save(schema);
+                OzonSchemaStatus += " 已保存开发缓存，下次自动读取。";
+            }
+            catch (Exception cacheError) when (cacheError is IOException or UnauthorizedAccessException)
+            {
+                OzonSchemaStatus += $" 本次 Schema 可用，但缓存保存失败：{cacheError.Message}";
+            }
             RefreshFieldMatchingInput();
-            ResetQwenMappingOutput("Schema 和详情事实就绪后，可以生成 AI 输入 JSON。");
-            RefreshQwenReadinessStatus();
+            ResetRuleMappingOutput("Schema 和详情事实就绪后，可以预览规则输入 JSON。");
+            RefreshRuleReadinessStatus();
         }
         catch (Exception error)
         {
@@ -401,7 +390,7 @@ public partial class MainViewModel : ObservableObject
             _ozonSchema = null;
             OzonSchemaJson = string.Empty;
             OzonSchemaStatus = $"Ozon Schema 读取失败：{error.Message}";
-            ResetQwenMappingOutput("Ozon Schema 不可用，无法生成 AI 输入 JSON。");
+            ResetRuleMappingOutput("Ozon Schema 不可用，无法预览规则输入 JSON。");
         }
         finally
         {
@@ -468,36 +457,11 @@ public partial class MainViewModel : ObservableObject
             OzonSchemaStatus = restoredFields.Count == 0
                 ? "尚无已保存的 Ozon 测试设置。"
                 : $"已恢复：{string.Join("、", restoredFields)}。可以验证凭证并读取 Schema。";
+            RestoreCachedSchema();
         }
         catch (Exception error)
         {
             OzonSchemaStatus = $"恢复 Ozon 测试设置失败：{error.Message}";
-        }
-    }
-
-    private async Task RestoreQwenTestSettingsAsync()
-    {
-        try
-        {
-            var settings = await _qwenTestSettingsStore.LoadAsync(CancellationToken.None);
-            _isRestoringQwenSettings = true;
-            try
-            {
-                QwenApiKey = settings.ApiKey;
-            }
-            finally
-            {
-                _isRestoringQwenSettings = false;
-            }
-
-            QwenMappingStatus = string.IsNullOrWhiteSpace(settings.ApiKey)
-                ? "AI 调用已暂停；预览输入 JSON 无需百炼 API Key。"
-                : "已从Windows Credential Manager恢复百炼API Key。";
-            RefreshQwenReadinessStatus();
-        }
-        catch (Exception error)
-        {
-            QwenMappingStatus = $"恢复百炼测试凭证失败：{error.Message}";
         }
     }
 
@@ -550,50 +514,6 @@ public partial class MainViewModel : ObservableObject
         pending?.Cancel();
     }
 
-    private void ScheduleQwenSettingsSave()
-    {
-        if (_isRestoringQwenSettings) return;
-        CancelPendingQwenSettingsSave();
-        var cancellation = new CancellationTokenSource();
-        _qwenSettingsSaveDebounce = cancellation;
-        _ = SaveQwenSettingsAfterDelayAsync(cancellation);
-    }
-
-    private async Task SaveQwenSettingsAfterDelayAsync(CancellationTokenSource cancellation)
-    {
-        try
-        {
-            await Task.Delay(600, cancellation.Token);
-            await SaveQwenTestSettingsAsync(cancellation.Token);
-        }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-        {
-            // 用户仍在输入，等待下一次防抖保存。
-        }
-        catch (Exception error)
-        {
-            QwenMappingStatus = $"保存百炼测试凭证失败：{error.Message}";
-        }
-        finally
-        {
-            if (ReferenceEquals(_qwenSettingsSaveDebounce, cancellation))
-            {
-                _qwenSettingsSaveDebounce = null;
-            }
-
-            cancellation.Dispose();
-        }
-    }
-
-    private Task SaveQwenTestSettingsAsync(CancellationToken cancellationToken) =>
-        _qwenTestSettingsStore.SaveAsync(new QwenTestSettings(QwenApiKey), cancellationToken);
-
-    private void CancelPendingQwenSettingsSave()
-    {
-        var pending = Interlocked.Exchange(ref _qwenSettingsSaveDebounce, null);
-        pending?.Cancel();
-    }
-
     public async Task ClearTemporaryOzonCredentialsAsync()
     {
         CancelPendingOzonSettingsSave();
@@ -611,7 +531,7 @@ public partial class MainViewModel : ObservableObject
         _ozonSchema = null;
         OzonAttributes.Clear();
         OzonSchemaJson = "尚未读取 Ozon Schema。";
-        ResetQwenMappingOutput("Ozon 凭证和 Schema 已清除，无法生成 AI 输入 JSON。");
+        ResetRuleMappingOutput("Ozon 凭证和 Schema 已清除，无法预览规则输入 JSON。");
         try
         {
             await _ozonTestSettingsStore.ClearCredentialsAsync(CancellationToken.None);
@@ -623,78 +543,22 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    public async Task ClearTemporaryQwenCredentialsAsync()
-    {
-        CancelPendingQwenSettingsSave();
-        _isRestoringQwenSettings = true;
-        try
-        {
-            QwenApiKey = string.Empty;
-        }
-        finally
-        {
-            _isRestoringQwenSettings = false;
-        }
-
-        try
-        {
-            await _qwenTestSettingsStore.ClearCredentialsAsync(CancellationToken.None);
-            QwenMappingStatus = "已从Windows Credential Manager删除百炼API Key。";
-        }
-        catch (Exception error)
-        {
-            QwenMappingStatus = $"界面凭证已清空，但删除百炼凭证失败：{error.Message}";
-        }
-
-        RunQwenMappingCommand.NotifyCanExecuteChanged();
-        RunRuleMappingCommand.NotifyCanExecuteChanged();
-    }
-
-    private bool CanRunQwenMapping() =>
-        !IsReviewBusy && !IsRunningQwenMapping && !IsBusy && !IsLoadingOzonSchema &&
+    private bool CanRunRuleMapping() =>
+        !IsReviewBusy && !IsRunningRuleMapping && !IsBusy && !IsLoadingOzonSchema &&
         _ozonSchema is not null && _latestFieldMatchingInput is not null &&
         SelectedOzonCategory?.DescriptionCategoryId == _ozonSchema.DescriptionCategoryId &&
         SelectedOzonType?.TypeId == _ozonSchema.TypeId;
 
-    [RelayCommand(CanExecute = nameof(CanRunQwenMapping))]
-    private Task RunQwenMappingAsync()
-    {
-        if (!CanRunQwenMapping() || _latestFieldMatchingInput is null) return Task.CompletedTask;
-        ResetProductMappingPreview("正在整理当前商品的 AI 输入 JSON…");
-        try
-        {
-            var input = ProductMappingInputBuilder.Create(_latestFieldMatchingInput);
-            ShowSkuIdentityPlan(input.Request);
-            FieldMatchingInputJson = JsonSerializer.Serialize(
-                QwenProductMappingTransport.Create(input.Request), ProductMappingJson.IndentedOptions);
-            QwenRequestJson = FieldMatchingInputJson;
-            foreach (var issue in input.SourceIssues) ProductMappingIssues.Add(issue);
-            QwenRawResponseJson = "AI 调用已暂停，本次没有发送请求。";
-            QwenDictionaryStatus = "仅在本地生成 AI 输入 JSON；未调用 Qwen，也未查询 Ozon 字典。";
-            FieldMatchingFinalOutputJson = "AI 调用已暂停；本次只生成输入 JSON，没有映射或组合结果。";
-            FieldMatchingFinalStatus = $"AI 输入 JSON 已生成：{input.Request.Facts.Count} 条事实、" +
-                $"{input.Request.Skus.Count} 个 SKU 组合、{input.Request.Attributes.Count} 个目标字段。请检查“AI 输入 JSON”。";
-            QwenMappingStatus = FieldMatchingFinalStatus;
-            SelectedFieldMatchingTabIndex = 5;
-        }
-        catch (Exception error)
-        {
-            QwenMappingStatus = FieldMatchingFinalStatus = $"生成 AI 输入 JSON 失败：{error.Message}";
-            ProductMappingIssues.Add(new("error", "input.invalid", "product", null, error.Message));
-        }
-        return Task.CompletedTask;
-    }
-
-    [RelayCommand(CanExecute = nameof(CanRunQwenMapping))]
+    [RelayCommand(CanExecute = nameof(CanRunRuleMapping))]
     private async Task RunRuleMappingAsync()
     {
-        if (!CanRunQwenMapping() || _latestFieldMatchingInput is null) return;
+        if (!CanRunRuleMapping() || _latestFieldMatchingInput is null) return;
         ResetProductMappingPreview("正在执行规则匹配…");
         IsPricingExpanded = false;
         using var cancellation = new CancellationTokenSource();
         _ruleMappingCancellation = cancellation;
         var source = _latestFieldMatchingInput;
-        IsRunningQwenMapping = true;
+        IsRunningRuleMapping = true;
         try
         {
             var session = await _ruleReviewService.OpenAsync(source,
@@ -705,10 +569,9 @@ public partial class MainViewModel : ObservableObject
             foreach (var row in session.Rows) ReviewRows.Add(row);
             foreach (var issue in session.Input.SourceIssues) ProductMappingIssues.Add(issue);
             ReviewStatus = $"已加载 {session.Rows.Count} 个目标字段；完善填写后勾选“已核对”，点击确认解析。规则目录：{_ruleReviewService.RulesPath}";
-            QwenRawResponseJson = "字段匹配不调用 AI/Qwen。";
-            QwenDictionaryStatus = "中文输入仅用于查找，无法确定官方值时请手动选择候选；绝不猜测 valueId。";
+            RuleDictionaryStatus = "中文输入仅用于查找，无法确定官方值时请手动选择候选；绝不猜测 valueId。";
             FieldMatchingFinalStatus = "JSON 规则匹配已完成，请在填写表单中核对。";
-            QwenMappingStatus = FieldMatchingFinalStatus;
+            RuleMappingStatus = FieldMatchingFinalStatus;
             SelectedFieldMatchingTabIndex = 0;
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
@@ -719,21 +582,23 @@ public partial class MainViewModel : ObservableObject
         finally
         {
             if (ReferenceEquals(_ruleMappingCancellation, cancellation)) _ruleMappingCancellation = null;
-            IsRunningQwenMapping = false;
+            IsRunningRuleMapping = false;
         }
     }
 
-    private bool CanCancelProductMapping() => IsRunningQwenMapping;
+    private bool CanCancelProductMapping() => IsRunningRuleMapping;
 
     [RelayCommand(CanExecute = nameof(CanCancelProductMapping))]
     private void CancelProductMapping()
     {
         ResetProductMappingPreview("本次映射已取消。");
-        QwenMappingStatus = "本次映射已取消。";
+        RuleMappingStatus = "本次映射已取消。";
     }
 
     private void ResetProductMappingPreview(string status)
     {
+        BindingRows.Clear(); BindingJson = ""; _bindingSource = null;
+        BindingStatus = "商品或 Schema 已变化，请重新生成初步方案。";
         _ruleMappingCancellation?.Cancel();
         _reviewSession = null;
         SelectedReviewRow = null;
@@ -743,16 +608,14 @@ public partial class MainViewModel : ObservableObject
         ProductMappingIssues.Clear();
         ProductSkuIdentityRows.Clear();
         ProductSkuPlanStatus = "等待 SKU 采集结果。";
-        QwenRequestJson = "尚未生成本次 AI 请求。";
-        QwenRawResponseJson = "AI 调用已暂停。";
-        QwenDictionaryStatus = "AI 调用已暂停；当前不查询字典。";
-        FieldMatchingFinalOutputJson = "AI 调用已暂停；当前只预览输入 JSON。";
+        RuleDictionaryStatus = "当前不查询字典。";
+        FieldMatchingFinalOutputJson = "请先运行规则映射。";
         FieldMatchingFinalStatus = status;
     }
 
     private void RefreshFieldMatchingInput()
     {
-        ResetProductMappingPreview("商品或 Schema 已更新，请重新生成 AI 输入 JSON。");
+        ResetProductMappingPreview("商品或 Schema 已更新，请重新运行规则映射。");
         FieldMatchingFacts.Clear();
         if (SelectedFieldMatchingDetail is null)
         {
@@ -777,7 +640,7 @@ public partial class MainViewModel : ObservableObject
             cleaned, ProductMappingJson.IndentedOptions);
         foreach (var fact in input.Source.Facts.Where(f => f.Kind is "title" or "attribute")) FieldMatchingFacts.Add(fact);
 
-        FieldMatchingInputJson = "请先读取当前 Ozon Schema，再生成 AI 输入 JSON。";
+        FieldMatchingInputJson = "请先读取当前 Ozon Schema，再预览规则输入 JSON。";
         if (input.Target.Attributes.Count > 0)
         {
             try
@@ -785,7 +648,7 @@ public partial class MainViewModel : ObservableObject
                 var preview = ProductMappingInputBuilder.Create(input, $"preview-v2-{input.ProductRef.OfferId}");
                 ShowSkuIdentityPlan(preview.Request);
                 FieldMatchingInputJson = JsonSerializer.Serialize(
-                    QwenProductMappingTransport.Create(preview.Request), ProductMappingJson.IndentedOptions);
+                    preview.Request, ProductMappingJson.IndentedOptions);
                 FieldMatchingFacts.Clear();
                 foreach (var fact in preview.Request.Facts)
                     FieldMatchingFacts.Add(new(fact.FactId, fact.ScopeKey, fact.Label, fact.Value, fact.Source, fact.SourcePath));
@@ -892,23 +755,12 @@ public partial class MainViewModel : ObservableObject
     partial void OnIsBusyChanged(bool value)
     {
         SearchCommand.NotifyCanExecuteChanged();
-        RunQwenMappingCommand.NotifyCanExecuteChanged();
         RunRuleMappingCommand.NotifyCanExecuteChanged();
     }
 
-    partial void OnQwenApiKeyChanged(string value)
-    {
-        ResetProductMappingPreview("AI 凭证已变化，请重新执行映射。");
-        RunQwenMappingCommand.NotifyCanExecuteChanged();
-        RunRuleMappingCommand.NotifyCanExecuteChanged();
-        ScheduleQwenSettingsSave();
-        RefreshQwenReadinessStatus();
-    }
-
-    partial void OnIsRunningQwenMappingChanged(bool value)
+    partial void OnIsRunningRuleMappingChanged(bool value)
     {
         OnPropertyChanged(nameof(IsReviewEditable));
-        RunQwenMappingCommand.NotifyCanExecuteChanged();
         RunRuleMappingCommand.NotifyCanExecuteChanged();
         CancelProductMappingCommand.NotifyCanExecuteChanged();
     }
@@ -917,7 +769,6 @@ public partial class MainViewModel : ObservableObject
     {
         ResetProductMappingPreview("Ozon 凭证已变化，请重新执行映射。");
         LoadOzonSchemaCommand.NotifyCanExecuteChanged();
-        RunQwenMappingCommand.NotifyCanExecuteChanged();
         RunRuleMappingCommand.NotifyCanExecuteChanged();
         ScheduleOzonSettingsSave();
     }
@@ -926,7 +777,6 @@ public partial class MainViewModel : ObservableObject
     {
         ResetProductMappingPreview("Ozon 凭证已变化，请重新执行映射。");
         LoadOzonSchemaCommand.NotifyCanExecuteChanged();
-        RunQwenMappingCommand.NotifyCanExecuteChanged();
         RunRuleMappingCommand.NotifyCanExecuteChanged();
         ScheduleOzonSettingsSave();
     }
@@ -951,6 +801,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnSelectedOzonTypeChanged(OzonTypeOption? value)
     {
         ResetOzonSchemaForSelection();
+        RestoreCachedSchema();
         LoadOzonSchemaCommand.NotifyCanExecuteChanged();
         ScheduleOzonSettingsSave();
     }
@@ -959,17 +810,16 @@ public partial class MainViewModel : ObservableObject
     {
         _latestDetailSnapshot = CreateDetailSnapshot(value);
         RefreshFieldMatchingInput();
-        ResetQwenMappingOutput(value is null
-            ? "请选择一个详情商品后再生成 AI 输入 JSON。"
-            : "字段匹配商品已切换；请基于当前商品重新生成 AI 输入 JSON。");
-        RefreshQwenReadinessStatus();
+        ResetRuleMappingOutput(value is null
+            ? "请选择一个详情商品后再预览规则输入 JSON。"
+            : "字段匹配商品已切换；请基于当前商品重新运行规则映射。");
+        RefreshRuleReadinessStatus();
     }
 
     partial void OnIsLoadingOzonSchemaChanged(bool value)
     {
         if (value) ResetProductMappingPreview("正在刷新 Schema，请完成后重新映射。");
         LoadOzonSchemaCommand.NotifyCanExecuteChanged();
-        RunQwenMappingCommand.NotifyCanExecuteChanged();
         RunRuleMappingCommand.NotifyCanExecuteChanged();
     }
 
@@ -984,35 +834,31 @@ public partial class MainViewModel : ObservableObject
             : SelectedOzonType is null
                 ? $"已选择品类：{SelectedOzonCategory.DisplayName}；请选择商品类型。"
                 : $"已选择：{SelectedOzonCategory.DisplayName} > {SelectedOzonType.Name}；可以验证凭证并读取 Schema。";
-        ResetQwenMappingOutput("Ozon 品类或类型已变化，请重新读取 Schema 后再生成 AI 输入 JSON。");
+        ResetRuleMappingOutput("Ozon 品类或类型已变化，请重新读取 Schema 后再预览规则输入 JSON。");
         RefreshFieldMatchingInput();
-        RunQwenMappingCommand.NotifyCanExecuteChanged();
         RunRuleMappingCommand.NotifyCanExecuteChanged();
     }
 
-    private void ResetQwenMappingOutput(string status)
+    private void ResetRuleMappingOutput(string status)
     {
-        QwenRequestJson = "尚未生成Qwen映射请求。";
-        QwenRawResponseJson = "AI 调用已暂停。";
-        QwenMappingStatus = status;
-        QwenDictionaryStatus = "AI 调用已暂停；当前不查询字典。";
+        RuleMappingStatus = status;
+        RuleDictionaryStatus = "当前不查询字典。";
         ResetProductMappingPreview(status);
-        RunQwenMappingCommand.NotifyCanExecuteChanged();
         RunRuleMappingCommand.NotifyCanExecuteChanged();
     }
 
-    private void RefreshQwenReadinessStatus()
+    private void RefreshRuleReadinessStatus()
     {
-        if (IsRunningQwenMapping)
+        if (IsRunningRuleMapping)
         {
             return;
         }
 
-        QwenMappingStatus = _ozonSchema is null
-            ? "AI 调用已暂停；请先读取当前 Ozon Schema。"
+        RuleMappingStatus = _ozonSchema is null
+            ? "请先读取当前 Ozon Schema。"
             : _latestDetailSnapshot is null
-                ? "AI 调用已暂停；请先采集 1688 详情事实。"
-                : "AI 调用已暂停；可以在字段匹配页生成并检查输入 JSON，无需百炼 API Key。";
+                ? "请先采集 1688 详情事实。"
+                : "可以在字段匹配页生成并检查输入 JSON。";
     }
 
     partial void OnCommissionRatePercentChanged(decimal value) => RefreshCostAnalysis();

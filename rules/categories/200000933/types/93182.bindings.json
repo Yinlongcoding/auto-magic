@@ -1,0 +1,207 @@
+{
+  "descriptionCategoryId": 200000933,
+  "typeId": 93182,
+  "attributes": [
+    {
+      "id": 4180,
+      "name": "名称",
+      "match": [
+        "商品名称",
+        "产品名称"
+      ]
+    },
+    {
+      "id": 4389,
+      "name": "原产国",
+      "conditions": [
+        {
+          "field": "原产国",
+          "operator": "contains",
+          "value": "广州",
+          "result": "中国"
+        },
+        {
+          "field": "原产国",
+          "operator": "contains",
+          "value": "深圳",
+          "result": "中国"
+        },
+        {
+          "field": "原产国",
+          "operator": "contains",
+          "value": "东莞",
+          "result": "中国"
+        },
+        {
+          "field": "原产国",
+          "operator": "contains",
+          "value": "汕头",
+          "result": "中国"
+        },
+        {
+          "field": "原产国",
+          "operator": "contains",
+          "value": "杭州",
+          "result": "中国"
+        },
+        {
+          "field": "产地",
+          "operator": "contains",
+          "value": "广州",
+          "result": "中国"
+        },
+        {
+          "field": "产地",
+          "operator": "contains",
+          "value": "深圳",
+          "result": "中国"
+        },
+        {
+          "field": "产地",
+          "operator": "contains",
+          "value": "东莞",
+          "result": "中国"
+        },
+        {
+          "field": "产地",
+          "operator": "contains",
+          "value": "汕头",
+          "result": "中国"
+        },
+        {
+          "field": "产地",
+          "operator": "contains",
+          "value": "杭州",
+          "result": "中国"
+        }
+      ],
+      "fallbackValue": "中国"
+    },
+    {
+      "id": 9163,
+      "name": "性别",
+      "defaultValue": "女性",
+      "match": [
+        "性别"
+      ]
+    },
+    {
+      "id": 10096,
+      "name": "商品颜色",
+      "match": [
+        "颜色"
+      ]
+    },
+    {
+      "id": 31,
+      "name": "服装和鞋类品牌",
+      "conditions": [
+        {
+          "field": "品牌",
+          "operator": "equals",
+          "value": "其他",
+          "result": "无品牌"
+        }
+      ],
+      "fallbackValue": "无品牌"
+    },
+    {
+      "id": 8229,
+      "name": "类型",
+      "conditions": [
+        {
+          "field": "袖型",
+          "operator": "equals",
+          "value": "无袖",
+          "result": "无袖连衣裙"
+        }
+      ],
+      "fallbackValue": "连衣裙"
+    },
+    {
+      "id": 4295,
+      "name": "俄罗斯尺码",
+      "match": [
+        "尺码"
+      ]
+    },
+    {
+      "id": 23063,
+      "name": "裙子/连衣裙长度",
+      "conditions": [
+        {
+          "field": "裙长",
+          "operator": "equals",
+          "value": "短裙",
+          "result": "短裙"
+        },{
+          "field": "裙长",
+          "operator": "equals",
+          "value": "中裙",
+          "result": "中裙"
+        },{
+          "field": "裙长",
+          "operator": "equals",
+          "value": "长裙",
+          "result": "长裙"
+        }
+      ],
+      "fallbackValue": "中裙"
+    },
+    {
+      "id": 4501,
+      "name": "风格",
+      "match": [
+        "跨境风格类型"
+      ]
+    },
+    {
+      "id": 11071,
+      "name": "衣领",
+      "conditions": [
+        {
+          "field": "领型",
+          "operator": "equals",
+          "value": "方领",
+          "result": "方领"
+        },{
+          "field": "领型",
+          "operator": "equals",
+          "value": "V领",
+          "result": "V领"
+        },{
+          "field": "领型",
+          "operator": "equals",
+          "value": "V字领",
+          "result": "V领"
+        },{
+          "field": "领型",
+          "operator": "equals",
+          "value": "一字领",
+          "result": "无领"
+        }
+      ],
+      "fallbackValue": "方领"
+    },
+    {
+      "id": 4604,
+      "name": "材料的组成",
+      "match": [
+        "主面料成分",
+        "主面料成分含量"
+      ]
+    },{
+      "id": 9661,
+      "name": "一个包装中的数量",
+      "conditions": [
+        {
+          "field": "组合形式",
+          "operator": "equals",
+          "value": "单件",
+          "result": "1"
+        }
+      ],
+      "fallbackValue": "1"
+    }
+  ]
+}

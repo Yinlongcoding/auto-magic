@@ -77,7 +77,6 @@ public partial class App : System.Windows.Application
                     "AutoMagic",
                     "ozon-test-settings.json"),
                 provider.GetRequiredService<IWindowsCredentialStore>()));
-        builder.Services.AddSingleton<IQwenTestSettingsStore, QwenTestSettingsStore>();
         builder.Services.AddSingleton<MainViewModel>();
         builder.Services.AddSingleton<MainWindow>();
 

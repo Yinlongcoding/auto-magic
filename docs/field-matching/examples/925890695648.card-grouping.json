@@ -1,0 +1,88 @@
+{
+  "stage": "card-grouping-preview",
+  "source": {
+    "platform": "1688",
+    "offerId": "925890695648",
+    "productTitle": "2025夏季纯色吊带纯色连衣裙女色丁高级感礼服女装连衣裙",
+    "articleNumber": "DZ001",
+    "skuMatrixStatus": "dimension_cartesian"
+  },
+  "ozonTarget": {
+    "descriptionCategoryId": 200000933,
+    "typeId": 93182
+  },
+  "cardGrouping": {
+    "attributeId": 8292,
+    "name": "合并至一张卡片",
+    "dictionaryValueId": 0,
+    "value": "DZ001-925890695648",
+    "basis": [
+      "1688事实：货号=DZ001",
+      "1688事实：offerId=925890695648"
+    ],
+    "reviewed": false
+  },
+  "variants": [
+    {
+      "sourceCombinationKey": "axes:1:1|2:1",
+      "offerId": "AM-1688-925890695648-EE0FCFD3D880",
+      "sharedCardValue": "DZ001-925890695648",
+      "sourceOptions": {
+        "颜色": "白色",
+        "尺码": "XS"
+      },
+      "requiredAttributes": [
+        { "id": 8292, "name": "合并至一张卡片", "value": "DZ001-925890695648", "dictionaryValueId": 0, "status": "human_review_required" },
+        { "id": 10096, "name": "商品颜色", "sourceValue": "白色", "valueId": null, "status": "dictionary_pending" },
+        { "id": 4295, "name": "俄罗斯尺码", "sourceValue": "XS", "valueId": null, "status": "conversion_and_dictionary_pending" }
+      ]
+    },
+    {
+      "sourceCombinationKey": "axes:1:1|2:2",
+      "offerId": "AM-1688-925890695648-8BB672CBF61C",
+      "sharedCardValue": "DZ001-925890695648",
+      "sourceOptions": {
+        "颜色": "白色",
+        "尺码": "S"
+      },
+      "requiredAttributes": [
+        { "id": 8292, "name": "合并至一张卡片", "value": "DZ001-925890695648", "dictionaryValueId": 0, "status": "human_review_required" },
+        { "id": 10096, "name": "商品颜色", "sourceValue": "白色", "valueId": null, "status": "dictionary_pending" },
+        { "id": 4295, "name": "俄罗斯尺码", "sourceValue": "S", "valueId": null, "status": "conversion_and_dictionary_pending" }
+      ]
+    },
+    {
+      "sourceCombinationKey": "axes:1:1|2:3",
+      "offerId": "AM-1688-925890695648-E8BDF9A57C30",
+      "sharedCardValue": "DZ001-925890695648",
+      "sourceOptions": {
+        "颜色": "白色",
+        "尺码": "M"
+      },
+      "requiredAttributes": [
+        { "id": 8292, "name": "合并至一张卡片", "value": "DZ001-925890695648", "dictionaryValueId": 0, "status": "human_review_required" },
+        { "id": 10096, "name": "商品颜色", "sourceValue": "白色", "valueId": null, "status": "dictionary_pending" },
+        { "id": 4295, "name": "俄罗斯尺码", "sourceValue": "M", "valueId": null, "status": "conversion_and_dictionary_pending" }
+      ]
+    },
+    {
+      "sourceCombinationKey": "axes:1:1|2:4",
+      "offerId": "AM-1688-925890695648-4366483D6BA7",
+      "sharedCardValue": "DZ001-925890695648",
+      "sourceOptions": {
+        "颜色": "白色",
+        "尺码": "L"
+      },
+      "requiredAttributes": [
+        { "id": 8292, "name": "合并至一张卡片", "value": "DZ001-925890695648", "dictionaryValueId": 0, "status": "human_review_required" },
+        { "id": 10096, "name": "商品颜色", "sourceValue": "白色", "valueId": null, "status": "dictionary_pending" },
+        { "id": 4295, "name": "俄罗斯尺码", "sourceValue": "L", "valueId": null, "status": "conversion_and_dictionary_pending" }
+      ]
+    }
+  ],
+  "warnings": [
+    "四个 SKU 来自规格轴笛卡尔积，逐组合库存、价格和可售性尚未确认。",
+    "商品颜色和俄罗斯尺码仍需查询并确认 Ozon valueId。",
+    "共享卡片值需人工确认后才能进入最终上架 JSON。"
+  ]
+}

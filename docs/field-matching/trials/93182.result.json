@@ -1,0 +1,217 @@
+{
+  "descriptionCategoryId": 200000933,
+  "typeId": 93182,
+  "sourceFile": "C:\\Users\\Administrator\\AppData\\Local\\AutoMagic\\collections\\COL-20260928054454699-b72d61763ee0477a87c0bb95c407c901\\details\\001.json",
+  "sourceTitle": "2025夏季纯色吊带纯色连衣裙女色丁高级感礼服女装连衣裙",
+  "stage": "source-field-binding-trial",
+  "schemaValidated": false,
+  "dictionaryQueried": false,
+  "attributes": [
+    {
+      "id": 4180,
+      "name": "名称",
+      "match": [
+        "商品名称",
+        "产品名称"
+      ],
+      "status": "matched",
+      "sourceFacts": [
+        {
+          "label": "商品名称",
+          "value": "2025夏季纯色吊带纯色连衣裙女色丁高级感礼服女装连衣裙",
+          "source": "document.title"
+        }
+      ],
+      "proposedValue": "2025夏季纯色吊带纯色连衣裙女色丁高级感礼服女装连衣裙"
+    },
+    {
+      "id": 4389,
+      "name": "原产国",
+      "match": [
+        "原产国",
+        "产地"
+      ],
+      "status": "matched",
+      "sourceFacts": [
+        {
+          "label": "产地",
+          "value": "浙江",
+          "source": "normal-attributes"
+        }
+      ],
+      "proposedValue": "浙江"
+    },
+    {
+      "id": 9163,
+      "name": "性别",
+      "match": [
+        "性别"
+      ],
+      "status": "missing",
+      "sourceFacts": [],
+      "proposedValue": null
+    },
+    {
+      "id": 10096,
+      "name": "商品颜色",
+      "match": [
+        "颜色"
+      ],
+      "status": "matched",
+      "sourceFacts": [
+        {
+          "label": "颜色",
+          "value": "白色",
+          "source": "normal-attributes"
+        }
+      ],
+      "proposedValue": "白色"
+    },
+    {
+      "id": 31,
+      "name": "服装和鞋类品牌",
+      "match": [
+        "品牌"
+      ],
+      "status": "matched",
+      "sourceFacts": [
+        {
+          "label": "品牌",
+          "value": "其他",
+          "source": "decision-attributes"
+        }
+      ],
+      "proposedValue": "其他"
+    },
+    {
+      "id": 8229,
+      "name": "类型",
+      "match": [
+        "裙型"
+      ],
+      "status": "matched",
+      "sourceFacts": [
+        {
+          "label": "裙型",
+          "value": "吊带裙",
+          "source": "normal-attributes"
+        }
+      ],
+      "proposedValue": "吊带裙"
+    },
+    {
+      "id": 4295,
+      "name": "俄罗斯尺码",
+      "match": [
+        "尺码"
+      ],
+      "status": "matched",
+      "sourceFacts": [
+        {
+          "label": "尺码",
+          "value": "XS、S、M、L",
+          "source": "normal-attributes"
+        }
+      ],
+      "proposedValue": "XS、S、M、L"
+    },
+    {
+      "id": 23063,
+      "name": "裙子/连衣裙长度",
+      "match": [
+        "裙长"
+      ],
+      "status": "duplicate_target",
+      "sourceFacts": [
+        {
+          "label": "裙长",
+          "value": "短裙",
+          "source": "decision-attributes"
+        }
+      ],
+      "proposedValue": null
+    },
+    {
+      "id": 4501,
+      "name": "风格",
+      "match": [
+        "风格类型",
+        "跨境风格类型",
+        "风格"
+      ],
+      "status": "multiple_source_values",
+      "sourceFacts": [
+        {
+          "label": "风格类型",
+          "value": "气质通勤",
+          "source": "normal-attributes"
+        },
+        {
+          "label": "风格",
+          "value": "通勤风",
+          "source": "normal-attributes"
+        },
+        {
+          "label": "跨境风格类型",
+          "value": "气质优雅",
+          "source": "normal-attributes"
+        }
+      ],
+      "proposedValue": null
+    },
+    {
+      "id": 11071,
+      "name": "衣领",
+      "match": [
+        "领型"
+      ],
+      "status": "matched",
+      "sourceFacts": [
+        {
+          "label": "领型",
+          "value": "方领",
+          "source": "normal-attributes"
+        }
+      ],
+      "proposedValue": "方领"
+    },
+    {
+      "id": 23063,
+      "name": "裙子/连衣裙长度",
+      "match": [
+        "裙型"
+      ],
+      "status": "duplicate_target",
+      "sourceFacts": [
+        {
+          "label": "裙型",
+          "value": "吊带裙",
+          "source": "normal-attributes"
+        }
+      ],
+      "proposedValue": null
+    },
+    {
+      "id": 4496,
+      "name": "材料",
+      "match": [
+        "主面料成分",
+        "主面料成分2"
+      ],
+      "status": "multiple_source_values",
+      "sourceFacts": [
+        {
+          "label": "主面料成分",
+          "value": "涤纶（聚酯纤维）",
+          "source": "decision-attributes"
+        },
+        {
+          "label": "主面料成分2",
+          "value": "氨纶",
+          "source": "normal-attributes"
+        }
+      ],
+      "proposedValue": null
+    }
+  ]
+}

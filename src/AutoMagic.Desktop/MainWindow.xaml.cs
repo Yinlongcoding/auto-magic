@@ -21,7 +21,6 @@ public partial class MainWindow : Window
         Loaded -= OnLoaded;
         await _viewModel.InitializeAsync();
         OzonApiKeyPasswordBox.Password = _viewModel.OzonApiKey;
-        QwenApiKeyPasswordBox.Password = _viewModel.QwenApiKey;
     }
 
     private void OnOzonApiKeyPasswordChanged(object sender, RoutedEventArgs e)
@@ -38,26 +37,16 @@ public partial class MainWindow : Window
         await _viewModel.ClearTemporaryOzonCredentialsAsync();
     }
 
-    private void OnQwenApiKeyPasswordChanged(object sender, RoutedEventArgs e)
-    {
-        if (sender is System.Windows.Controls.PasswordBox passwordBox)
-        {
-            _viewModel.QwenApiKey = passwordBox.Password;
-        }
-    }
 
-    private async void OnClearQwenCredentials(object sender, RoutedEventArgs e)
-    {
-        QwenApiKeyPasswordBox.Clear();
-        await _viewModel.ClearTemporaryQwenCredentialsAsync();
-    }
+
+
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (_viewModel.IsBusy || _viewModel.IsRunningQwenMapping)
+        if (_viewModel.IsBusy || _viewModel.IsRunningRuleMapping)
         {
             var choice = MessageBox.Show(
-                "搜索采集或AI映射仍在进行，确定要退出吗？",
+                "搜索采集或规则映射仍在进行，确定要退出吗？",
                 "Auto Magic",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);

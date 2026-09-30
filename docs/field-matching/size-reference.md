@@ -43,4 +43,4 @@ O'STIN 列取其男装 **Casual / Studio 肩部服装（上衣）**表；FINN FL
 
 本表不覆盖童装、鞋、内衣、牛仔裤 `W/L`、`均码`、身高号型或供应商自定义码。这些需要各自的商品尺码依据。即使同一品牌，尺码体系也可能不同：Nike 官方女上装常规版 `M` 的胸围为 `90–97 cm`，亚洲版 `M` 为 `85–89.5 cm`，因此不应以字母本身推断身体围度。[Nike 常规版](https://www.nike.com/bg/size-fit/womens-tops-alpha) · [Nike 亚洲版](https://www.nike.com/hu/en/size-fit/womens-tops-asian-alpha)
 
-仓库现有的 [源到目标字段合同](source-target-contract.md)将尺码换算列为 `conversion_required`，并要求外部规则、字典或人工确认；本参考表不修改该合同，也不绑定任何 Ozon 属性或字典值。
+当前[字段映射流程](../../rules/README.md)先保留源尺码供人工确认，不因字段关联成功就认定俄码转换完成。本参考表不绑定任何 Ozon 属性或字典值。

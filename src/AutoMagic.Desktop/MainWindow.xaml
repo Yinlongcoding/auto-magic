@@ -324,13 +324,9 @@
                                       DisplayMemberPath="ProductTitle"
                                       ToolTip="选择本轮采集的一个详情商品，查看其源证据和目标字段" />
                             <StackPanel Grid.Column="2" Orientation="Horizontal">
-                            <Button Content="运行规则匹配" Padding="16,7" Margin="0,0,8,0"
-                                    Command="{Binding RunRuleMappingCommand}"
+                            <Button Content="生成初步方案" Padding="16,7" Margin="0,0,8,0"
+                                    Command="{Binding PreviewFieldBindingsCommand}"
                                     ToolTip="确定性规则匹配；无法识别的字段留空待人工处理，不调用 AI" />
-                            <Button Content="生成 AI 输入 JSON"
-                                    Padding="16,7"
-                                    Command="{Binding RunQwenMappingCommand}"
-                                    ToolTip="仅在本地整理并显示将提交给 Qwen 的 JSON；不会调用 AI" />
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -346,13 +342,31 @@
                                        FontWeight="SemiBold"
                                        Foreground="#1D4ED8"
                                        TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding QwenDictionaryStatus}" Margin="0,5,0,0"
+                            <TextBlock Text="{Binding RuleDictionaryStatus}" Margin="0,5,0,0"
                                        Foreground="#4B5563" TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
 
                     <TabControl Grid.Row="2" SelectedIndex="{Binding SelectedFieldMatchingTabIndex, Mode=TwoWay}">
-                        <TabItem Header="匹配与人工填写">
+                        <TabItem Header="初步方案与人工确认">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Top" Margin="8">
+                                    <TextBlock Text="{Binding BindingStatus}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                                    <Button Content="导出已确认 JSON" Command="{Binding ExportFieldBindingsCommand}" HorizontalAlignment="Left" Padding="12,6" />
+                                </StackPanel>
+                                <DataGrid ItemsSource="{Binding BindingRows}" AutoGenerateColumns="False" CanUserAddRows="False">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Ozon 字段" Binding="{Binding Name}" IsReadOnly="True" Width="150" />
+                                        <DataGridTextColumn Header="作用范围" Binding="{Binding ScopeDisplay}" IsReadOnly="True" Width="130" />
+                                        <DataGridTextColumn Header="源值" Binding="{Binding SourceValues}" IsReadOnly="True" Width="*" />
+                                        <DataGridTextColumn Header="状态" Binding="{Binding Status}" IsReadOnly="True" Width="180" />
+                                        <DataGridTextColumn Header="确认内容（中文）" Binding="{Binding InputText, UpdateSourceTrigger=PropertyChanged}" Width="*" />
+                                        <DataGridCheckBoxColumn Header="已确认" Binding="{Binding Reviewed, UpdateSourceTrigger=PropertyChanged}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+                        </TabItem>
+                        <TabItem Header="字典解析（后续阶段）" Visibility="Collapsed">
                             <DockPanel>
                                 <StackPanel DockPanel.Dock="Top" Margin="8">
                                     <TextBlock Text="{Binding ReviewStatus}" TextWrapping="Wrap" Margin="0,0,0,8" />
@@ -483,7 +497,7 @@
                                      VerticalScrollBarVisibility="Auto"
                                      HorizontalScrollBarVisibility="Auto" />
                         </TabItem>
-                        <TabItem Header="AI 输入 JSON（预览）">
+                        <TabItem Header="规则输入 JSON（预览）">
                             <TextBox Text="{Binding FieldMatchingInputJson}"
                                      IsReadOnly="True"
                                      AcceptsReturn="True"
@@ -493,12 +507,6 @@
                                      FontSize="12"
                                      Padding="10"
                                      VerticalScrollBarVisibility="Auto"
-                                     HorizontalScrollBarVisibility="Auto" />
-                        </TabItem>
-                        <TabItem Header="AI 原始响应（暂停）">
-                            <TextBox Text="{Binding QwenRawResponseJson}" IsReadOnly="True"
-                                     AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Consolas"
-                                     FontSize="12" Padding="10" VerticalScrollBarVisibility="Auto"
                                      HorizontalScrollBarVisibility="Auto" />
                         </TabItem>
                         <TabItem Header="引擎结果 JSON">
@@ -591,27 +599,12 @@
                                           DisplayMemberPath="DisplayName"
                                           ToolTip="先选择品类，再选择该品类下的商品类型" />
                                 <Button Grid.Row="1" Grid.Column="4"
-                                        Content="验证并读取"
+                                        Content="请求并刷新 Schema"
                                         Padding="14,7"
                                         Command="{Binding LoadOzonSchemaCommand}" />
-
-                                <TextBlock Grid.Row="2" Grid.Column="0"
-                                           Text="Qwen API Key（暂停期间无需填写）"
-                                           Margin="0,10,8,0"
-                                           VerticalAlignment="Center" />
-                                <PasswordBox x:Name="QwenApiKeyPasswordBox"
-                                             Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3"
-                                             Margin="0,10,18,0"
-                                             Padding="8,6"
-                                             PasswordChanged="OnQwenApiKeyPasswordChanged" />
-                                <Button Grid.Row="2" Grid.Column="4"
-                                        Content="清除凭证"
-                                        Margin="0,10,0,0"
-                                        Style="{StaticResource SecondaryButtonStyle}"
-                                        Click="OnClearQwenCredentials" />
                             </Grid>
                             <TextBlock Margin="0,10,0,0"
-                                       Text="AI 调用已暂停。字段匹配页只在本地生成将提交给 Qwen 的输入 JSON，不会查询字典或生成映射建议。"
+                                       Text="读取 Schema 后，使用 JSON 规则映射商品字段；未解决项由人工确认。"
                                        Foreground="#6B7280"
                                        TextWrapping="Wrap" />
                         </StackPanel>
@@ -621,11 +614,11 @@
                         <TextBlock Text="{Binding OzonSchemaStatus}"
                                    Foreground="#374151"
                                    TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding QwenMappingStatus}"
+                        <TextBlock Text="{Binding RuleMappingStatus}"
                                    Margin="0,5,0,0"
                                    Foreground="#374151"
                                    TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding QwenDictionaryStatus}"
+                        <TextBlock Text="{Binding RuleDictionaryStatus}"
                                    Margin="0,5,0,0"
                                    Foreground="#4B5563"
                                    TextWrapping="Wrap" />
@@ -667,3 +660,4 @@
         </TabControl>
     </Grid>
 </Window>
+

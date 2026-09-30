@@ -14,7 +14,7 @@ public static class ProductMappingValidator
             issues.Add(new("error", code, scope, attribute, message));
         if (response is null)
         {
-            Error("response.missing", "product", null, "没有可校验的 AI 映射结果。");
+            Error("response.missing", "product", null, "没有可校验的 映射结果。");
             return new(false, 0, issues, rows);
         }
         if (response.RequestId != request.RequestId)
@@ -47,7 +47,7 @@ public static class ProductMappingValidator
                 ValidateScope(variant.VariantKey, variant.Mappings);
         }
         foreach (var sku in request.Skus.Where(s => !variants.ContainsKey(s.VariantKey)))
-            Error("sku.omitted", sku.VariantKey, null, "AI 未返回这个真实 SKU 的映射建议。");
+            Error("sku.omitted", sku.VariantKey, null, "映射结果未包含这个真实 SKU 的映射建议。");
 
         var unresolvedRequired = 0;
         var signatures = new Dictionary<string, List<string>>(StringComparer.Ordinal);
@@ -83,7 +83,7 @@ public static class ProductMappingValidator
                     Error("required.omitted", scope, attribute.AttributeId,
                         $"必填属性“{attribute.Name}”没有返回建议或明确的未解决原因。");
                     rows.Add(new(scope, ScopeDisplay(scope), attribute.AttributeId, attribute.Name, true,
-                        "missing_evidence", "", "", "", "校验失败", "AI 遗漏了必填属性。"));
+                        "missing_evidence", "", "", "", "校验失败", "映射结果缺少必填属性。"));
                 }
                 else if (mappings.Any(m => m.Status != ProductMappingStatuses.Suggested) ||
                     issues.Any(i => i.Severity == "error" && (i.AttributeId is null || i.AttributeId == attribute.AttributeId) &&

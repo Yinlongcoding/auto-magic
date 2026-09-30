@@ -111,23 +111,11 @@ public sealed record ProductMappingValidation(
     bool ContractValid, int UnresolvedRequiredCount,
     IReadOnlyList<ProductMappingIssue> Issues, IReadOnlyList<ProductMappingRow> Rows);
 
-public sealed record ProductMappingCallResult(
-    string ProviderRequestId, string ModelId, string PromptVersion, string RawContent,
-    QwenTokenUsage Usage, ProductMappingResponse? Response,
-    IReadOnlyList<ProductMappingIssue> ParseIssues);
-
-public interface IProductSemanticMapper
-{
-    Task<ProductMappingCallResult> MapAsync(
-        QwenApiCredentials credentials, ProductMappingRequest request, CancellationToken cancellationToken);
-}
-
 public sealed record ProductMappingRun(
     ProductMappingRequest Request, ProductMappingResponse? Response,
-    ProductMappingValidation Validation, IReadOnlyList<ProductMappingCallResult> Calls)
+    ProductMappingValidation Validation)
 {
     public bool ReadyForListing => false;
-    public int TotalTokens => Calls.Sum(call => call.Usage.TotalTokens);
     public ProductSkuIdentityPlan SkuIdentityPlan => new(
         Request.ProductGroupKey,
         Request.SourceOfferId,

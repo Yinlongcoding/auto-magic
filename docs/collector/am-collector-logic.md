@@ -10,7 +10,7 @@
 关键词：手机壳
 采购价格范围：可选
 排序方式：默认销量优先，可选价格优先
-详情抓取范围：搜索结果中的全部有效商品
+详情抓取范围：开发测试阶段为列表前 10 条
 ```
 
 输出是一个抓取任务结果：一份商品列表 JSON，以及列表中每个商品对应的一份详情事实。任何后续模块都只能使用这个结果，不应重新解析网页。
@@ -26,7 +26,6 @@
 | 桌面端请求入口 | `src/AutoMagic.Infrastructure/Bridge/DesktopBridgeService.cs`、`src/AutoMagic.Contracts/Protocol/BridgeProtocol.cs` | 接收桌面端采集任务并把最终结果返回桌面端 |
 | 桌面端任务状态 | `src/AutoMagic.Desktop/ViewModels/MainViewModel.cs` | 发起搜索、展示列表和详情事实、保存当前批次状态 |
 | 采集协议 | `src/AutoMagic.Contracts/Protocol/BridgeProtocol.cs` | 定义搜索任务、列表商品、详情事实和逐商品结果的 JSON 合同 |
-| 采集测试 | `test/*.test.mjs`、`tests/AutoMagic.Contracts.Tests/*` | 验证列表提取、详情事实、SKU、协议和失败隔离 |
 
 ## 3. 端到端流程
 
@@ -74,11 +73,11 @@ created → searching → list_ready → collecting_details → completed
 
 ```text
 打开详情页
-→ 等待页面完成和关键区域渲染
+→ 等待详情 DOM 可读与关键区域就绪
 → 直接读取当前 DOM 与结构化 SKU
 → 属性或 SKU 组合缺失时定向滚动对应区域并重试
 → 采集详情事实
-→ 关闭临时标签页
+→ 保留共享详情标签页供下一条复用
 → 写入该商品结果
 → 继续下一个商品
 ```
