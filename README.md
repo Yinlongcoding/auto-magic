@@ -1,6 +1,6 @@
 # Auto Magic
 
-更新：2026-09-30。Windows WPF / .NET 10 桌面应用，通过 Chrome 扩展与 Native Messaging Host 采集 1688 商品，使用人工定义的 JSON 字段规则生成待确认方案。
+更新：2026-10-08。Windows WPF / .NET 10 桌面应用，通过 Chrome 扩展与 Native Messaging Host 采集 1688 商品，使用人工定义的 JSON 字段规则生成待确认方案。
 
 ## 当前可用流程
 
@@ -8,6 +8,10 @@
 2. 选择 Ozon 品类和类型。开发期间自动读取本地 Schema 缓存；首次点击“请求并刷新 Schema”。
 3. 点击“生成初步方案”。当前版本只生成 Schema 标记为必填的属性；没有映射规则的必填项仍显示为空并等待人工填写。商品公共字段显示一次，SKU 按来源值分组。
 4. 修改中文内容、勾选已确认、导出确认 JSON。该阶段不查询 valueId，也不自动回写规则。
+
+当前连衣裙类型 200000933/93182 已配置“合并至一张卡片”：同一条源商品记录下的全部 SKU 使用 `1688-{源商品 offerId}` 作为公共分组字符串，仍需人工确认；不同源商品分开成组。
+
+该分组值是项目内部策略，正式接口格式及真实合并结果尚未验证；继续此流程前请阅读 [同款 SKU 合并：数据组织与核验状态](docs/field-matching/card-grouping.md)。
 
 当前界面入口为 FieldBindingPreview。RuleReviewService、JsonRuleReviewStore 的字典核验、回写与统计服务仍保留，尚未接入新的分阶段确认流程；旧字典表单隐藏。导出不是完整上架请求，正式商品发布未实现。不使用 AI 推断缺失字段。
 
@@ -27,6 +31,7 @@ dotnet run --project verification/AutoMagic.RuleReview.Checks
 
 - [开发规范](AGENTS.md)
 - [字段规则、条件、默认值与值规则](rules/README.md)
+- [同款 SKU 合并：数据组织、依据与待验证事项](docs/field-matching/card-grouping.md)
 - [采集实现](docs/collector/am-collector-logic.md)
 - [数据清洗](docs/data-organization/cleaned-product.md)
 - [尺码研究参考，非运行规则](docs/field-matching/size-reference.md)

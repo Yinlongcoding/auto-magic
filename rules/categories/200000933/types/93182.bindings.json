@@ -3,6 +3,11 @@
   "typeId": 93182,
   "attributes": [
     {
+      "id": 8292,
+      "name": "合并至一张卡片",
+      "generator": "source-product-card-key"
+    },
+    {
       "id": 4180,
       "name": "名称",
       "match": [

@@ -115,6 +115,67 @@ var unconfiguredRequired = requiredOnly.Single(row => row.AttributeId == 8292);
 Check(unconfiguredRequired.InputText == "" && unconfiguredRequired.SchemaValid &&
       unconfiguredRequired.Resolution == "unresolved" && unconfiguredRequired.Status.Contains("未配置映射"),
     "Unconfigured required attributes remain visible and blank for human input");
+var cardBinding = originFile.Attributes.Single(b => b.Id == 8292);
+var cardInput = Input("925890695648",93182) with {
+    Target = requiredOnlyInput.Target with { DescriptionCategoryId = 200000933, TypeId = 93182 },
+    Source = Input("925890695648",93182).Source with { SkuCombinations = [
+        new("white-s", "verified", new Dictionary<string,string?> { ["颜色"] = "白色", ["尺码"] = "S" }, null, null),
+        new("red-m", "dimension-cartesian", new Dictionary<string,string?> { ["颜色"] = "红色", ["尺码"] = "M" }, null, null)
+    ] }
+};
+var cardRow = FieldBindingPreview.CreateRequired(cardInput, originFile.Attributes).Single(r => r.AttributeId == 8292);
+var cardRequest = ProductMappingInputBuilder.Create(cardInput).Request;
+Check(cardRow.InputText == "1688-925890695648" && cardRow.ScopeKeys.SequenceEqual(["product"]) &&
+      cardRow.Resolution == "generated" && !cardRow.Reviewed && !cardRow.UsedDefault &&
+      cardRow.FactIds.Length == 0 && cardRow.SourceValues.Contains("925890695648") &&
+      cardRequest.Skus.Count == 2 && cardRequest.Skus.Select(s => s.MerchantSku).Distinct().Count() == 2,
+    "Configured card grouping shares one reviewable product value across distinct SKU identities");
+var recapturedCard = cardInput with {
+    CollectionId = "another-collection",
+    ProductRef = cardInput.ProductRef with { CapturedAt = "2026-10-08" },
+    Source = cardInput.Source with { Title = "改名后的商品", SkuCombinations = cardInput.Source.SkuCombinations.Reverse().ToArray() }
+};
+Check(FieldBindingPreview.Create(recapturedCard, [cardBinding]).Single().InputText == cardRow.InputText &&
+      FieldBindingPreview.Create(cardInput with { Source = cardInput.Source with { SkuCombinations = [] } },
+          [cardBinding]).Single().InputText == cardRow.InputText,
+    "Card key survives recapture, title changes, SKU order changes and absence of variants");
+Check(FieldBindingPreview.Create(cardInput with {
+          ProductRef = cardInput.ProductRef with { OfferId = "925890695649" }
+      }, [cardBinding]).Single().InputText != cardRow.InputText,
+    "Different source products never share the generated card key");
+foreach (var cardAttribute in new FieldMatchingTargetAttribute[] {
+    new(8292,1,"合并至一张卡片","","String","",false,true,1,0),
+    new(8292,0,"合并至一张卡片","","String","",true,true,1,0),
+    new(8292,0,"合并至一张卡片","","String","",false,true,1,123),
+    new(8292,0,"合并至一张卡片","","Integer","",false,true,1,0)
+})
+{
+    var invalidCard = FieldBindingPreview.Create(cardInput with {
+        Target = cardInput.Target with { Attributes = [cardAttribute] }
+    }, [cardBinding]).Single();
+    Check(invalidCard.InputText == "" && !invalidCard.SchemaValid,
+        "Card generation rejects incompatible Schema: " + JsonSerializer.Serialize(cardAttribute));
+}
+Check(FieldBindingPreview.Create(cardInput with {
+          Source = cardInput.Source with { Platform = "other" }
+      }, [cardBinding]).Single().InputText == "",
+    "Card generation leaves unsupported source platforms unresolved");
+try {
+    FieldBindingPreview.Create(cardInput with { ProductRef = cardInput.ProductRef with { OfferId = "" } }, [cardBinding]);
+    throw new Exception("Expected missing source identity rejection");
+} catch (ArgumentException) { Check(true, "Missing source identity cannot generate a shared card key"); }
+foreach (var invalidGenerator in new[] {
+    cardBinding with { Generator = "unknown" }, cardBinding with { Id = 20 },
+    cardBinding with { Match = ["颜色"] }, cardBinding with { DefaultValue = "固定组" },
+    cardBinding with { Conditions = [new("颜色", "equals", "红色", "组")] },
+    cardBinding with { FallbackValue = "固定组" }
+})
+{
+    try {
+        FieldBindingPreview.Create(cardInput, [invalidGenerator]);
+        throw new Exception("Expected invalid card generator rejection");
+    } catch (InvalidDataException) { Check(true, "Invalid or competing card generator definitions are rejected"); }
+}
 var conflictPreview = FieldBindingPreview.Create(Input("binding-conflict",200), [new(20, "颜色", ["颜色", "材质"])]);
 Check(conflictPreview.Single().InputText == "" && conflictPreview.Single().SourceValues.Contains("棉"),
     "Multiple distinct source values remain visible without selecting an answer");

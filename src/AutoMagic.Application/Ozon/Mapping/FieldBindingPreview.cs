@@ -2,7 +2,7 @@ namespace AutoMagic.Application.Ozon.Mapping;
 
 public sealed record FieldBindingFile(long DescriptionCategoryId, long? TypeId, IReadOnlyList<FieldBinding> Attributes);
 public sealed record FieldBinding(long Id, string Name, IReadOnlyList<string>? Match = null, string? DefaultValue = null,
-    IReadOnlyList<FieldCondition>? Conditions = null, string? FallbackValue = null);
+    IReadOnlyList<FieldCondition>? Conditions = null, string? FallbackValue = null, string? Generator = null);
 public sealed record FieldCondition(string Field, string Operator, string Value, string Result);
 public sealed class FieldBindingRow
 {
@@ -57,6 +57,14 @@ public static class FieldBindingPreview
             throw new InvalidDataException("字段映射存在重复属性 ID。");
         foreach (var b in bindings)
         {
+            if (b.Generator is not null)
+            {
+                if (b.Generator != "source-product-card-key" || b.Id != 8292 ||
+                    b.Match is not null || b.Conditions is not null ||
+                    b.DefaultValue is not null || b.FallbackValue is not null)
+                    throw new InvalidDataException("卡片分组生成规则仅支持属性 8292，不可同时配置 match、conditions、默认值或兜底值。");
+                continue;
+            }
             var conditional = b.Conditions is { Count: > 0 };
             if (b.Id <= 0 || (conditional
                 ? b.Match is { Count: > 0 } ||
@@ -75,6 +83,23 @@ public static class FieldBindingPreview
         foreach (var binding in bindings)
         {
             var attribute = request.Attributes.SingleOrDefault(a => a.AttributeId == binding.Id);
+            if (binding.Generator == "source-product-card-key")
+            {
+                var valid = attribute is { AttributeComplexId: 0, IsCollection: false, DictionaryId: 0 } &&
+                    string.Equals(attribute.Type, "String", StringComparison.OrdinalIgnoreCase);
+                var supportedSource = source.Source.Platform == "1688";
+                rows.Add(new FieldBindingRow {
+                    AttributeId = binding.Id, Name = attribute?.Name ?? binding.Name,
+                    SchemaValid = valid, DictionaryId = attribute?.DictionaryId ?? 0,
+                    Status = !valid ? "Schema 缺失或不是非字典单值文本属性" : !supportedSource ?
+                        "来源平台不支持卡片分组，待填写" : "同一源商品全部 SKU 共用分组键，待确认",
+                    SourceValues = $"{source.Source.Platform} offerId: {request.SourceOfferId}",
+                    InputText = valid && supportedSource ? $"1688-{request.SourceOfferId}" : "",
+                    Resolution = !valid ? "schema_invalid" : supportedSource ? "generated" : "unresolved",
+                    ScopeKeys = ["product"]
+                });
+                continue;
+            }
             var conditional = binding.Conditions is { Count: > 0 };
             var labels = conditional ? binding.Conditions!.Select(c => c.Field).Distinct().ToArray() : binding.Match!.ToArray();
             var related = facts.Where(f => labels.Contains(f.Label, StringComparer.Ordinal)).ToArray();

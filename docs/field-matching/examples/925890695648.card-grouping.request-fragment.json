@@ -1,0 +1,64 @@
+{
+  "items": [
+    {
+      "offer_id": "AM-1688-925890695648-EE0FCFD3D880",
+      "attributes": [
+        {
+          "complex_id": 0,
+          "id": 8292,
+          "values": [
+            {
+              "dictionary_value_id": 0,
+              "value": "1688-925890695648"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "offer_id": "AM-1688-925890695648-8BB672CBF61C",
+      "attributes": [
+        {
+          "complex_id": 0,
+          "id": 8292,
+          "values": [
+            {
+              "dictionary_value_id": 0,
+              "value": "1688-925890695648"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "offer_id": "AM-1688-925890695648-E8BDF9A57C30",
+      "attributes": [
+        {
+          "complex_id": 0,
+          "id": 8292,
+          "values": [
+            {
+              "dictionary_value_id": 0,
+              "value": "1688-925890695648"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "offer_id": "AM-1688-925890695648-4366483D6BA7",
+      "attributes": [
+        {
+          "complex_id": 0,
+          "id": 8292,
+          "values": [
+            {
+              "dictionary_value_id": 0,
+              "value": "1688-925890695648"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -4,7 +4,13 @@
 
 当前版本仅执行当前 Ozon Schema 中 `isRequired=true` 的属性。规则文件可继续保存非必填映射，但生成方案和导出流程不显示、不执行这些映射。必填属性没有配置映射时仍显示一行空值，状态为“必填项未配置映射，待填写”，避免因为缺少规则而从表单中消失。
 
-200000933/93182 当前有 6 个必填属性：类型 8229、性别 9163、俄罗斯尺码 4295、商品颜色 10096、合并至一张卡片 8292、服装和鞋类品牌 31。“合并至一张卡片”是商品变体的共享分组键，不是布尔值：同一款商品的不同颜色和尺码使用完全相同的字符串，每个变体仍保留不同的 `offer_id`，并分别填写颜色和尺码；不需要合并时也填写只属于该商品的唯一字符串。分组键不应包含品牌、类型、颜色或尺码。当前没有足够的人工命名规则，因此属性 8292 保持为空等待填写，不从标题或内部 SKU 自动猜测。
+200000933/93182 当前有 6 个必填属性：类型 8229、性别 9163、俄罗斯尺码 4295、商品颜色 10096、合并至一张卡片 8292、服装和鞋类品牌 31。“合并至一张卡片”是商品变体的共享分组键，不是布尔值：同一款商品的不同颜色和尺码使用完全相同的字符串，每个变体仍保留不同的 `offer_id`，并分别填写颜色和尺码；不需要合并时也填写只属于该商品的唯一字符串。
+
+2026-10-08 已明确当前分组策略：一条 1688 采集商品记录下的全部 SKU 视为同一款。类型 93182 的属性 8292 配置 `generator: "source-product-card-key"`，按源商品 `productRef.offerId` 生成 `1688-{offerId}`（例如 `1688-925890695648`）。商品公共属性只显示、确认和导出一次，`scopeKeys=["product"]` 表示全部 SKU 共用，`resolution="generated"`；来源显示平台和商品 ID，不伪造属性事实 ID，不查询字典，也不自动勾选确认。重复采集、标题、颜色、尺码或 SKU 顺序变化不改变分组键；不同源商品 ID 分开成组。当前不跨商品链接合组，不从标题、货号或内部 SKU 猜测分组。
+
+生成器仅可用于属性 8292，且不能与 match、conditions、defaultValue、fallbackValue 同时配置。当前 Schema 必须为非复杂、非集合、非字典的 String 属性，否则留空并禁止确认；其他来源平台留空等待填写。源商品 ID 缺失时沿用现有请求校验，阻止生成方案。规则仅在显式配置它的品类/类型执行，当前仅启用 200000933/93182。
+
+以上描述当前内部规则，不代表已完成 Ozon 上架／合并验证。正式请求参数候选、四 SKU 源数据、代码依据和待验证事项统一记录在 [同款 SKU 合并说明](../docs/field-matching/card-grouping.md)；参数示例不能当作已验证请求。
 
 条件字段使用 conditions 代替 match，按顺序检查 field/operator/value/result。支持 equals、notEquals 和 contains，均要求该字段存在唯一非空的清洗后值。contains 是区分大小写的文本包含匹配，不使用 AI 或近似拼写；所有关联来源必须只有一个不同值且无同名不确定事实，才允许包含转换。没有命中时使用显式 fallbackValue（包括来源缺失或冲突），没有配置则留空；Schema 无效时即使有兜底也留空。条件也可使用 defaultValue，但仅在来源缺失且无同名不确定事实时填充。条件、默认和兜底均需人工确认，导出 resolution=condition/default/fallback。
 
@@ -18,7 +24,7 @@
 
 桌面主按钮为“生成初步方案”：读取当前 Schema 后，按清洗后的事实进行字段关联，不查询 valueId。公共字段显示一次，SKU 字段按相同源值分组；多个不同来源值留空并展示候选。修改中文内容、勾选已确认后，可导出确认 JSON。未确认项的 confirmedValue 为 null；导出不代表已通过字典校验或能够上架。
 
-字段清单保存在 categories/{categoryId}/bindings.json（typeId 为 null）和 categories/{categoryId}/types/{typeId}.bindings.json。采用 descriptionCategoryId、typeId、attributes（id、name、match）格式；类型按属性 ID 覆盖品类，单文件重复 ID 拒绝加载。目标 ID 必须存在于当前 Schema，复杂属性暂不支持确认。当前录入 200000933/93182 的 11 项映射，长度只匹配裙长。
+字段清单保存在 categories/{categoryId}/bindings.json（typeId 为 null）和 categories/{categoryId}/types/{typeId}.bindings.json。采用 descriptionCategoryId、typeId、attributes 格式；每项包含 id、name，并选择 match、conditions 或受支持的 generator。类型按属性 ID 覆盖品类，单文件重复 ID 拒绝加载。目标 ID 必须存在于当前 Schema，复杂属性暂不支持确认。当前录入 200000933/93182 的 13 项映射，长度来源只读取裙长。
 
 字段清单与现有值规则共用 rules 根目录。第一阶段只生成中文方案，尚不自动回写字段或值规则、不解析字典；下文描述的字典确认服务保留用于后续阶段，旧表单已从主流程隐藏。
 
