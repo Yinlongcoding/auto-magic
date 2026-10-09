@@ -43,10 +43,10 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (_viewModel.IsBusy || _viewModel.IsRunningRuleMapping)
+        if (_viewModel.IsBusy)
         {
             var choice = MessageBox.Show(
-                "搜索采集或规则映射仍在进行，确定要退出吗？",
+                "搜索采集仍在进行，确定要退出吗？",
                 "Auto Magic",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);

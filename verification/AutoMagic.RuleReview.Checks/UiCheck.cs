@@ -14,7 +14,7 @@ using AutoMagic.Infrastructure.Collection;
 
 static class UiCheck
 {
-    public static void Run(RuleReviewService service, RuleReviewSession session, string root)
+    public static void Run(FieldMappingService service, string root, FieldMatchingInput source)
     {
         Exception? failure = null;
         var thread = new Thread(() =>
@@ -24,11 +24,23 @@ static class UiCheck
                 var vm = new MainViewModel(Stub<ISearchBridge>(), Stub<IExchangeRateService>(), Stub<IOzonSchemaService>(),
                     Stub<ILocalOzonCategoryCatalog>(), Stub<IOzonTestSettingsStore>(),
                     new CollectionSnapshotStore(Path.Combine(root,"collections")), service);
-                vm.BindingRows.Add(new FieldBindingRow { AttributeId = 20, Name = "颜色", ScopeKeys = ["product"], SourceValues = "酒红色", InputText = "酒红色", SchemaValid = true });
+                foreach (var row in service.CreateRequired(source)) vm.BindingRows.Add(row);
+                vm.BindingRows.Single().Reviewed = true;
+                foreach (var field in new[] { "_latestFieldMatchingInput", "_bindingSource" })
+                    typeof(MainViewModel).GetField(field,BindingFlags.Instance|BindingFlags.NonPublic)!.SetValue(vm,source);
+                vm.MatchConfirmedFieldValuesCommand.Execute(null);
+                using (var json = System.Text.Json.JsonDocument.Parse(vm.BindingJson))
+                    if (json.RootElement.GetProperty("stage").GetString() != "human-confirmed-value-mapping" ||
+                        vm.BindingRows.Single().ValueId != 101)
+                        throw new Exception("Confirmed value command did not update the export and bound row");
+                vm.BindingRows.Single().InputText = "未知颜色";
+                if(vm.BindingJson.Length != 0 || vm.FieldMatchingFinalOutputJson.Length != 0 || vm.BindingRows.Single().Reviewed)
+                    throw new Exception("Editing a confirmed row retained stale export JSON");
+                vm.BindingRows.Single().InputText = "酒红色"; vm.BindingRows.Single().Reviewed = true;
+                vm.MatchConfirmedFieldValuesCommand.Execute(null);
 
                 vm.IsPricingExpanded=false;
                 vm.SelectedFieldMatchingTabIndex=0;
-                vm.ReviewStatus = "完善中文填写，勾选已核对，然后确认解析并保存规则。";
                 var window = new MainWindow(vm);
                 var tab = Descendants(window).OfType<TabItem>().Single(t=>Equals(t.Header,"字段匹配"));
                 tab.IsSelected=true;

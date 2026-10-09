@@ -1,0 +1,10 @@
+{
+  "categoryId": 200000933,
+  "attributes": {
+    "9163": {
+      "semantic": "gender",
+      "path": "common.modules.gender",
+      "defaultValue": "女性"
+    }
+  }
+}

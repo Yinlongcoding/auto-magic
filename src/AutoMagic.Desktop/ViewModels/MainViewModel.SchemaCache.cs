@@ -29,7 +29,7 @@ public partial class MainViewModel
             OzonSchemaStatus = $"开发缓存：已加载 {schema.Attributes.Count} 个属性，获取于 {schema.CapturedAt.ToLocalTime():yyyy-MM-dd HH:mm}；可手动刷新。";
             RefreshFieldMatchingInput();
             RefreshRuleReadinessStatus();
-            RunRuleMappingCommand.NotifyCanExecuteChanged();
+            PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
         {

@@ -1,19 +1,44 @@
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+
 namespace AutoMagic.Application.Ozon.Mapping;
 
-public sealed record FieldBindingFile(long DescriptionCategoryId, long? TypeId, IReadOnlyList<FieldBinding> Attributes);
 public sealed record FieldBinding(long Id, string Name, IReadOnlyList<string>? Match = null, string? DefaultValue = null,
     IReadOnlyList<FieldCondition>? Conditions = null, string? FallbackValue = null, string? Generator = null);
 public sealed record FieldCondition(string Field, string Operator, string Value, string Result);
-public sealed class FieldBindingRow
+public sealed class FieldBindingRow : INotifyPropertyChanged
 {
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void Changed([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new(name));
     public long AttributeId { get; init; }
     public string Name { get; init; } = "";
-    public string Status { get; init; } = "";
+    public string Status { get; set; } = "";
+    public string? ModulePath { get; internal set; }
+    public string? BindingFingerprint { get; internal set; }
+    public string[] ValueSourcePaths { get; internal set; } = [];
     public string SourceValues { get; init; } = "";
     public bool UsedDefault { get; init; }
     public string Resolution { get; init; } = "source";
-    public string InputText { get; set; } = "";
-    public bool Reviewed { get; set; }
+    private string _inputText = "";
+    public string InputText { get => _inputText; set {
+        if (_inputText == value) return;
+        _inputText = value ?? ""; Reviewed = false; ClearValueMatch(); Changed();
+    } }
+    private bool _reviewed;
+    public bool Reviewed { get => _reviewed; set {
+        if (_reviewed == value) return;
+        _reviewed = value; ClearValueMatch(); Changed();
+    } }
+    private long? _valueId;
+    public long? ValueId { get => _valueId; internal set { _valueId = value; Changed(); } }
+    private string? _targetValue;
+    public string? TargetValue { get => _targetValue; internal set { _targetValue = value; Changed(); } }
+    private string _valueStatus = "待确认并匹配";
+    public string ValueStatus { get => _valueStatus; internal set { _valueStatus = value; Changed(); } }
+    private string _valueResolution = "unresolved";
+    public string ValueResolution { get => _valueResolution; internal set { _valueResolution = value; Changed(); } }
+    public void ClearValueMatch()
+    { ValueId = null; TargetValue = null; ValueResolution = "unresolved"; ValueStatus = "待确认并匹配"; ValueSourcePaths = []; }
     public bool SchemaValid { get; init; }
     public long DictionaryId { get; init; }
     public string[] ScopeKeys { get; init; } = [];
@@ -51,7 +76,7 @@ public static class FieldBindingPreview
         return rows.OrderBy(row => order[row.AttributeId]).ToArray();
     }
 
-    public static IReadOnlyList<FieldBindingRow> Create(FieldMatchingInput source, IReadOnlyList<FieldBinding> bindings)
+    public static void ValidateBindings(IReadOnlyList<FieldBinding> bindings)
     {
         if (bindings.Select(b => b.Id).Distinct().Count() != bindings.Count)
             throw new InvalidDataException("字段映射存在重复属性 ID。");
@@ -66,14 +91,19 @@ public static class FieldBindingPreview
                 continue;
             }
             var conditional = b.Conditions is { Count: > 0 };
-            if (b.Id <= 0 || (conditional
-                ? b.Match is { Count: > 0 } ||
+            if (b.Id <= 0 || b.Match is { Count: 0 } || b.Conditions is { Count: 0 } || (conditional
+                ? b.Match is not null ||
                   b.Conditions!.Any(c => c is null || string.IsNullOrWhiteSpace(c.Field) ||
                     c.Operator is not ("equals" or "notEquals" or "contains") || string.IsNullOrWhiteSpace(c.Value) ||
                     string.IsNullOrWhiteSpace(c.Result))
                 : b.Match is not { Count: > 0 } || b.Match.Any(string.IsNullOrWhiteSpace) || b.FallbackValue is not null))
                 throw new InvalidDataException("字段规则须选择 match 或 conditions；条件只支持 equals/notEquals/contains。");
         }
+    }
+
+    public static IReadOnlyList<FieldBindingRow> Create(FieldMatchingInput source, IReadOnlyList<FieldBinding> bindings)
+    {
+        ValidateBindings(bindings);
         var cleaned = CleanedProductBuilder.Create(source);
         var allowed = cleaned.ConfirmedFacts.Where(f => f.FactId is not null && f.RawValue is string)
             .Select(f => "product:" + f.FactId).ToHashSet(StringComparer.Ordinal);

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "kind": "dictionary",
+  "attributeId": 9163,
+  "values": [
+    {
+      "match": ["女性"],
+      "targetValue": "женский",
+      "valueId": 22881
+    },
+    {
+      "match": ["男性"],
+      "targetValue": "Мужской",
+      "valueId": 22880
+    },
+    {
+      "match": ["女孩"],
+      "targetValue": "Девочки",
+      "valueId": 22882
+    },
+    {
+      "match": ["男孩"],
+      "targetValue": "Мальчики",
+      "valueId": 22883
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "kind": "index",
+  "modules": {
+    "gender": "rules/gender.json",
+    "country": "rules/country.json"
+  }
+}

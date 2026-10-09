@@ -2,7 +2,7 @@
 
 ## Development direction and simplicity
 
-- Build an explicit JSON mapping engine: source attribute bindings and value mappings are defined by humans. Category rules share bindings; type rules supplement or override them; verified common dictionaries are reused.
+- Build an explicit JSON mapping engine: each type plan lists its complete attribute IDs and module references. Human-defined modules under common or dictionary own source bindings, conversions, defaults, and value mappings. Resolve only explicit references, including dictionary-to-common chains; do not restore implicit common/category/type inheritance or fallback searches. Reuse verified dictionaries with attribute, dictionary, and applicability checks.
 - Unknown, ambiguous, or low-confidence values remain blank for human review. Do not restore AI/Qwen inference as a fallback.
 - Before adding or changing a feature, inspect its entry points and references. Remove obsolete implementations, unused dependencies, misleading UI, and superseded documentation within the affected scope.
 - Keep one active implementation for each workflow. Do not retain dead compatibility wrappers, provider settings, prompts, or parallel engines for hypothetical future use. Git history preserves retired code.

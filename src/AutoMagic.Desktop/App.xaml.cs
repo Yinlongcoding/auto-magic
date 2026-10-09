@@ -58,14 +58,8 @@ public partial class App : System.Windows.Application
             client.Timeout = TimeSpan.FromSeconds(20);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("AutoMagic/0.2");
         }).RedactLoggedHeaders(_ => true);
-        builder.Services.AddHttpClient<IOzonDictionaryService, OzonDictionaryService>(client =>
-        {
-            client.BaseAddress = new Uri("https://api-seller.ozon.ru/");
-            client.Timeout = TimeSpan.FromSeconds(60);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("AutoMagic/0.2");
-        }).RedactLoggedHeaders(_ => true);
-        builder.Services.AddSingleton<IRuleReviewStore>(_ => new JsonRuleReviewStore(ResolveRulesPath()));
-        builder.Services.AddTransient<RuleReviewService>();
+        builder.Services.AddSingleton<IFieldMappingStore>(_ => new JsonFieldMappingStore(ResolveRulesPath()));
+        builder.Services.AddTransient<FieldMappingService>();
         builder.Services.AddSingleton<ILocalOzonCategoryCatalog>(_ =>
             new LocalOzonCategoryCatalog(
                 Path.Combine(AppContext.BaseDirectory, "Data", "ozon-category-tree.test.json")));

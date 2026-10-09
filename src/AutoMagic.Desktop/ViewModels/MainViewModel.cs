@@ -32,7 +32,6 @@ public partial class MainViewModel : ObservableObject
     private CancellationTokenSource? _ozonSettingsSaveDebounce;
     private bool _isRestoringOzonSettings;
     private FieldMatchingInput? _latestFieldMatchingInput;
-    private CancellationTokenSource? _ruleMappingCancellation;
 
     [ObservableProperty]
     private string _keyword = "连衣裙";
@@ -122,9 +121,6 @@ public partial class MainViewModel : ObservableObject
     private string _ozonSchemaJson = "尚未读取 Ozon Schema。";
 
     [ObservableProperty]
-    private bool _isRunningRuleMapping;
-
-    [ObservableProperty]
     private string _ruleMappingStatus = "准备 Ozon Schema 和 1688 详情后可预览输入 JSON。";
 
     [ObservableProperty]
@@ -161,7 +157,7 @@ public partial class MainViewModel : ObservableObject
         ILocalOzonCategoryCatalog ozonCategoryCatalog,
         IOzonTestSettingsStore ozonTestSettingsStore,
         CollectionSnapshotStore collectionSnapshotStore,
-        RuleReviewService ruleReviewService)
+        FieldMappingService fieldMappingService)
     {
         _searchBridge = searchBridge;
         _exchangeRateService = exchangeRateService;
@@ -169,7 +165,13 @@ public partial class MainViewModel : ObservableObject
         _ozonCategoryCatalog = ozonCategoryCatalog;
         _ozonTestSettingsStore = ozonTestSettingsStore;
         _collectionSnapshotStore = collectionSnapshotStore;
-        _ruleReviewService = ruleReviewService;
+        _fieldMappingService = fieldMappingService;
+        BindingRows.CollectionChanged += (_, change) => {
+            if (change.OldItems is not null)
+                foreach (FieldBindingRow row in change.OldItems) row.PropertyChanged -= OnBindingRowChanged;
+            if (change.NewItems is not null)
+                foreach (FieldBindingRow row in change.NewItems) row.PropertyChanged += OnBindingRowChanged;
+        };
         _dispatcher = Dispatcher.CurrentDispatcher;
         _statusText = GetConnectionText(searchBridge.IsExtensionConnected);
         _searchBridge.ConnectionChanged += OnConnectionChanged;
@@ -305,7 +307,7 @@ public partial class MainViewModel : ObservableObject
             ?? (_latestDetailResults.Count == 0 ? result.DetailSnapshot : null);
         RefreshFieldMatchingInput();
         RefreshRuleReadinessStatus();
-        RunRuleMappingCommand.NotifyCanExecuteChanged();
+        PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
     }
 
     private static bool IsMappableDetail(DetailCollectionResultDto detail) =>
@@ -543,67 +545,16 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private bool CanRunRuleMapping() =>
-        !IsReviewBusy && !IsRunningRuleMapping && !IsBusy && !IsLoadingOzonSchema &&
+    private bool CanPreviewFieldBindings() =>
+        !IsBusy && !IsLoadingOzonSchema &&
         _ozonSchema is not null && _latestFieldMatchingInput is not null &&
         SelectedOzonCategory?.DescriptionCategoryId == _ozonSchema.DescriptionCategoryId &&
         SelectedOzonType?.TypeId == _ozonSchema.TypeId;
-
-    [RelayCommand(CanExecute = nameof(CanRunRuleMapping))]
-    private async Task RunRuleMappingAsync()
-    {
-        if (!CanRunRuleMapping() || _latestFieldMatchingInput is null) return;
-        ResetProductMappingPreview("正在执行规则匹配…");
-        IsPricingExpanded = false;
-        using var cancellation = new CancellationTokenSource();
-        _ruleMappingCancellation = cancellation;
-        var source = _latestFieldMatchingInput;
-        IsRunningRuleMapping = true;
-        try
-        {
-            var session = await _ruleReviewService.OpenAsync(source,
-                new OzonTemporaryCredentials(OzonClientId, OzonApiKey), cancellation.Token);
-            if (cancellation.IsCancellationRequested || !ReferenceEquals(source, _latestFieldMatchingInput)) return;
-            _reviewSession = session;
-            ShowSkuIdentityPlan(session.Input.Request);
-            foreach (var row in session.Rows) ReviewRows.Add(row);
-            foreach (var issue in session.Input.SourceIssues) ProductMappingIssues.Add(issue);
-            ReviewStatus = $"已加载 {session.Rows.Count} 个目标字段；完善填写后勾选“已核对”，点击确认解析。规则目录：{_ruleReviewService.RulesPath}";
-            RuleDictionaryStatus = "中文输入仅用于查找，无法确定官方值时请手动选择候选；绝不猜测 valueId。";
-            FieldMatchingFinalStatus = "JSON 规则匹配已完成，请在填写表单中核对。";
-            RuleMappingStatus = FieldMatchingFinalStatus;
-            SelectedFieldMatchingTabIndex = 0;
-        }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
-        catch (Exception)
-        {
-            FieldMatchingFinalStatus = "规则匹配失败，请检查输入与 Ozon 配置后重试。";
-        }
-        finally
-        {
-            if (ReferenceEquals(_ruleMappingCancellation, cancellation)) _ruleMappingCancellation = null;
-            IsRunningRuleMapping = false;
-        }
-    }
-
-    private bool CanCancelProductMapping() => IsRunningRuleMapping;
-
-    [RelayCommand(CanExecute = nameof(CanCancelProductMapping))]
-    private void CancelProductMapping()
-    {
-        ResetProductMappingPreview("本次映射已取消。");
-        RuleMappingStatus = "本次映射已取消。";
-    }
 
     private void ResetProductMappingPreview(string status)
     {
         BindingRows.Clear(); BindingJson = ""; _bindingSource = null;
         BindingStatus = "商品或 Schema 已变化，请重新生成初步方案。";
-        _ruleMappingCancellation?.Cancel();
-        _reviewSession = null;
-        SelectedReviewRow = null;
-        ReviewRows.Clear();
-        ReviewStatus = "请先运行规则匹配。";
         ProductMappingRows.Clear();
         ProductMappingIssues.Clear();
         ProductSkuIdentityRows.Clear();
@@ -755,21 +706,14 @@ public partial class MainViewModel : ObservableObject
     partial void OnIsBusyChanged(bool value)
     {
         SearchCommand.NotifyCanExecuteChanged();
-        RunRuleMappingCommand.NotifyCanExecuteChanged();
-    }
-
-    partial void OnIsRunningRuleMappingChanged(bool value)
-    {
-        OnPropertyChanged(nameof(IsReviewEditable));
-        RunRuleMappingCommand.NotifyCanExecuteChanged();
-        CancelProductMappingCommand.NotifyCanExecuteChanged();
+        PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnOzonClientIdChanged(string value)
     {
         ResetProductMappingPreview("Ozon 凭证已变化，请重新执行映射。");
         LoadOzonSchemaCommand.NotifyCanExecuteChanged();
-        RunRuleMappingCommand.NotifyCanExecuteChanged();
+        PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
         ScheduleOzonSettingsSave();
     }
 
@@ -777,7 +721,7 @@ public partial class MainViewModel : ObservableObject
     {
         ResetProductMappingPreview("Ozon 凭证已变化，请重新执行映射。");
         LoadOzonSchemaCommand.NotifyCanExecuteChanged();
-        RunRuleMappingCommand.NotifyCanExecuteChanged();
+        PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
         ScheduleOzonSettingsSave();
     }
 
@@ -820,7 +764,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (value) ResetProductMappingPreview("正在刷新 Schema，请完成后重新映射。");
         LoadOzonSchemaCommand.NotifyCanExecuteChanged();
-        RunRuleMappingCommand.NotifyCanExecuteChanged();
+        PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
     }
 
     private void ResetOzonSchemaForSelection()
@@ -836,7 +780,7 @@ public partial class MainViewModel : ObservableObject
                 : $"已选择：{SelectedOzonCategory.DisplayName} > {SelectedOzonType.Name}；可以验证凭证并读取 Schema。";
         ResetRuleMappingOutput("Ozon 品类或类型已变化，请重新读取 Schema 后再预览规则输入 JSON。");
         RefreshFieldMatchingInput();
-        RunRuleMappingCommand.NotifyCanExecuteChanged();
+        PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
     }
 
     private void ResetRuleMappingOutput(string status)
@@ -844,17 +788,12 @@ public partial class MainViewModel : ObservableObject
         RuleMappingStatus = status;
         RuleDictionaryStatus = "当前不查询字典。";
         ResetProductMappingPreview(status);
-        RunRuleMappingCommand.NotifyCanExecuteChanged();
+        PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
     }
 
     private void RefreshRuleReadinessStatus()
     {
-        if (IsRunningRuleMapping)
-        {
-            return;
-        }
-
-        RuleMappingStatus = _ozonSchema is null
+RuleMappingStatus = _ozonSchema is null
             ? "请先读取当前 Ozon Schema。"
             : _latestDetailSnapshot is null
                 ? "请先采集 1688 详情事实。"
