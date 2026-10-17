@@ -70,6 +70,7 @@ public sealed class OzonSchemaService(HttpClient httpClient) : IOzonSchemaServic
                 attribute.Type?.Trim() ?? string.Empty,
                 attribute.IsCollection,
                 attribute.IsRequired,
+                attribute.IsAspect,
                 attribute.DictionaryId,
                 attribute.MaxValueCount,
                 attribute.GroupName?.Trim() ?? string.Empty))
@@ -120,6 +121,7 @@ public sealed class OzonSchemaService(HttpClient httpClient) : IOzonSchemaServic
         [property: JsonPropertyName("type")] string? Type,
         [property: JsonPropertyName("is_collection")] bool IsCollection,
         [property: JsonPropertyName("is_required")] bool IsRequired,
+        [property: JsonPropertyName("is_aspect")] bool IsAspect,
         [property: JsonPropertyName("dictionary_id")] long DictionaryId,
         [property: JsonPropertyName("max_value_count")] int MaxValueCount,
         [property: JsonPropertyName("group_name")] string? GroupName);

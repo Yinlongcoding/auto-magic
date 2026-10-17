@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Windows.Threading;
 using AutoMagic.Application.ExchangeRates;
 using AutoMagic.Application.Ozon;
-using AutoMagic.Application.Ozon.Mapping;
+using AutoMagic.Application.Ozon.Rules;
 using AutoMagic.Application.Search;
 using AutoMagic.Contracts.Protocol;
 using AutoMagic.Domain.Pricing;
@@ -22,16 +22,19 @@ public partial class MainViewModel : ObservableObject
     private readonly ILocalOzonCategoryCatalog _ozonCategoryCatalog;
     private readonly IOzonTestSettingsStore _ozonTestSettingsStore;
     private readonly CollectionSnapshotStore _collectionSnapshotStore;
+    private readonly CleaningEngine _cleaningEngine;
+    private readonly MatchingEngine _matchingEngine;
     private readonly Dispatcher _dispatcher;
     private bool _initialized;
     private OzonCategorySchema? _ozonSchema;
-    private DetailFactSnapshotDto? _latestDetailSnapshot;
     private IReadOnlyList<DetailCollectionResultDto> _latestDetailResults = [];
     private string _latestCollectionId = string.Empty;
     private int _ozonSchemaRequestRevision;
     private CancellationTokenSource? _ozonSettingsSaveDebounce;
     private bool _isRestoringOzonSettings;
-    private FieldMatchingInput? _latestFieldMatchingInput;
+    private RuleSourceProduct? _currentSource;
+    private CleanedProduct? _lastCleaned;
+    private MatchedProduct? _lastMatched;
 
     [ObservableProperty]
     private string _keyword = "连衣裙";
@@ -121,34 +124,16 @@ public partial class MainViewModel : ObservableObject
     private string _ozonSchemaJson = "尚未读取 Ozon Schema。";
 
     [ObservableProperty]
-    private string _ruleMappingStatus = "准备 Ozon Schema 和 1688 详情后可预览输入 JSON。";
+    private DetailCollectionResultDto? _selectedCleaningDetail;
 
     [ObservableProperty]
-    private string _ruleDictionaryStatus = "当前不查询字典。";
-
-    [ObservableProperty]
-    private DetailCollectionResultDto? _selectedFieldMatchingDetail;
-
-    [ObservableProperty]
-    private string _fieldMatchingStatus = "完成一次详情采集后，可以在这里审阅匹配输入。";
-
-    [ObservableProperty]
-    private string _fieldMatchingInputJson = "尚未生成字段匹配输入。";
+    private string _cleaningSourceStatus = "完成详情采集后，选择商品并执行数据清洗。";
 
     [ObservableProperty]
     private string _cleanedProductJson = "选择一个已采集的商品以查看数据清洗结果。";
 
     [ObservableProperty]
-    private int _selectedFieldMatchingTabIndex = 0;
-
-    [ObservableProperty]
-    private string _fieldMatchingFinalOutputJson = "尚未生成统一最终输出。";
-
-    [ObservableProperty]
-    private string _fieldMatchingFinalStatus = "等待字段匹配输入和引擎计划。";
-
-    [ObservableProperty]
-    private string _productSkuPlanStatus = "等待 SKU 采集结果。";
+    private int _selectedCleaningTabIndex = 0;
 
     public MainViewModel(
         ISearchBridge searchBridge,
@@ -157,7 +142,8 @@ public partial class MainViewModel : ObservableObject
         ILocalOzonCategoryCatalog ozonCategoryCatalog,
         IOzonTestSettingsStore ozonTestSettingsStore,
         CollectionSnapshotStore collectionSnapshotStore,
-        FieldMappingService fieldMappingService)
+        CleaningEngine cleaningEngine,
+        MatchingEngine matchingEngine)
     {
         _searchBridge = searchBridge;
         _exchangeRateService = exchangeRateService;
@@ -165,13 +151,8 @@ public partial class MainViewModel : ObservableObject
         _ozonCategoryCatalog = ozonCategoryCatalog;
         _ozonTestSettingsStore = ozonTestSettingsStore;
         _collectionSnapshotStore = collectionSnapshotStore;
-        _fieldMappingService = fieldMappingService;
-        BindingRows.CollectionChanged += (_, change) => {
-            if (change.OldItems is not null)
-                foreach (FieldBindingRow row in change.OldItems) row.PropertyChanged -= OnBindingRowChanged;
-            if (change.NewItems is not null)
-                foreach (FieldBindingRow row in change.NewItems) row.PropertyChanged += OnBindingRowChanged;
-        };
+        _cleaningEngine = cleaningEngine;
+        _matchingEngine = matchingEngine;
         _dispatcher = Dispatcher.CurrentDispatcher;
         _statusText = GetConnectionText(searchBridge.IsExtensionConnected);
         _searchBridge.ConnectionChanged += OnConnectionChanged;
@@ -186,13 +167,9 @@ public partial class MainViewModel : ObservableObject
 
     public ObservableCollection<OzonTypeOption> OzonTypeOptions { get; } = [];
 
-    public ObservableCollection<DetailCollectionResultDto> FieldMatchingProducts { get; } = [];
+    public ObservableCollection<DetailCollectionResultDto> CleaningProducts { get; } = [];
 
-    public ObservableCollection<FieldMatchingSourceFact> FieldMatchingFacts { get; } = [];
-
-    public ObservableCollection<ProductMappingRow> ProductMappingRows { get; } = [];
-    public ObservableCollection<ProductMappingIssue> ProductMappingIssues { get; } = [];
-    public ObservableCollection<ProductSkuIdentityPlanItem> ProductSkuIdentityRows { get; } = [];
+    public ObservableCollection<SourceFact> SourceFacts { get; } = [];
 
     public IReadOnlyList<ProductSortOption> SortOptions { get; } =
     [
@@ -232,13 +209,11 @@ public partial class MainViewModel : ObservableObject
         Products.Clear();
         ResultCount = 0;
         RawJson = "等待插件返回数据…";
-        _latestDetailSnapshot = null;
         _latestDetailResults = [];
         _latestCollectionId = string.Empty;
-        FieldMatchingProducts.Clear();
-        SelectedFieldMatchingDetail = null;
-        ClearFieldMatchingPreview("正在等待新的详情采集结果。");
-        ResetRuleMappingOutput("正在等待新的1688详情事实。");
+        CleaningProducts.Clear();
+        SelectedCleaningDetail = null;
+        ClearCleaningPreview("正在等待新的详情采集结果。");
 
         try
         {
@@ -285,7 +260,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception error)
         {
-            FieldMatchingStatus = $"恢复最近采集结果失败：{error.Message}";
+            CleaningSourceStatus = $"恢复最近采集结果失败：{error.Message}";
         }
     }
 
@@ -298,16 +273,12 @@ public partial class MainViewModel : ObservableObject
         _latestCollectionId = collectionId;
         _latestDetailResults = result.DetailResults ?? [];
         var mappableDetails = _latestDetailResults.Where(IsMappableDetail).ToArray();
-        FieldMatchingProducts.Clear();
-        foreach (var detail in mappableDetails) FieldMatchingProducts.Add(detail);
-        SelectedFieldMatchingDetail = mappableDetails.FirstOrDefault(item =>
+        CleaningProducts.Clear();
+        foreach (var detail in mappableDetails) CleaningProducts.Add(detail);
+        SelectedCleaningDetail = mappableDetails.FirstOrDefault(item =>
             string.Equals(item.Status, "success", StringComparison.OrdinalIgnoreCase))
             ?? mappableDetails.FirstOrDefault();
-        _latestDetailSnapshot = CreateDetailSnapshot(SelectedFieldMatchingDetail, result.CapturedAt)
-            ?? (_latestDetailResults.Count == 0 ? result.DetailSnapshot : null);
-        RefreshFieldMatchingInput();
-        RefreshRuleReadinessStatus();
-        PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
+        RefreshCleaningInput();
     }
 
     private static bool IsMappableDetail(DetailCollectionResultDto detail) =>
@@ -361,6 +332,7 @@ public partial class MainViewModel : ObservableObject
             }
 
             _ozonSchema = schema;
+            CleanProductCommand.NotifyCanExecuteChanged();
             foreach (var attribute in _ozonSchema.Attributes)
             {
                 OzonAttributes.Add(attribute);
@@ -368,7 +340,7 @@ public partial class MainViewModel : ObservableObject
 
             OzonSchemaJson = JsonSerializer.Serialize(_ozonSchema, BridgeJson.IndentedOptions);
             OzonSchemaStatus =
-                $"凭证验证成功：{selectedCategory.DisplayName} > {selectedType.Name}；读取 {_ozonSchema.Attributes.Count} 个属性，其中必填 {_ozonSchema.RequiredCount} 个。";
+                $"凭证验证成功：{selectedCategory.DisplayName} > {selectedType.Name}；读取 {_ozonSchema.Attributes.Count} 个属性，其中必填 {_ozonSchema.RequiredCount} 个、变体 {_ozonSchema.AspectCount} 个。";
             try
             {
                 _schemaCache.Save(schema);
@@ -378,9 +350,6 @@ public partial class MainViewModel : ObservableObject
             {
                 OzonSchemaStatus += $" 本次 Schema 可用，但缓存保存失败：{cacheError.Message}";
             }
-            RefreshFieldMatchingInput();
-            ResetRuleMappingOutput("Schema 和详情事实就绪后，可以预览规则输入 JSON。");
-            RefreshRuleReadinessStatus();
         }
         catch (Exception error)
         {
@@ -390,9 +359,9 @@ public partial class MainViewModel : ObservableObject
             }
 
             _ozonSchema = null;
+            CleanProductCommand.NotifyCanExecuteChanged();
             OzonSchemaJson = string.Empty;
             OzonSchemaStatus = $"Ozon Schema 读取失败：{error.Message}";
-            ResetRuleMappingOutput("Ozon Schema 不可用，无法预览规则输入 JSON。");
         }
         finally
         {
@@ -531,9 +500,9 @@ public partial class MainViewModel : ObservableObject
             _isRestoringOzonSettings = false;
         }
         _ozonSchema = null;
+        CleanProductCommand.NotifyCanExecuteChanged();
         OzonAttributes.Clear();
         OzonSchemaJson = "尚未读取 Ozon Schema。";
-        ResetRuleMappingOutput("Ozon 凭证和 Schema 已清除，无法预览规则输入 JSON。");
         try
         {
             await _ozonTestSettingsStore.ClearCredentialsAsync(CancellationToken.None);
@@ -545,122 +514,36 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private bool CanPreviewFieldBindings() =>
-        !IsBusy && !IsLoadingOzonSchema &&
-        _ozonSchema is not null && _latestFieldMatchingInput is not null &&
-        SelectedOzonCategory?.DescriptionCategoryId == _ozonSchema.DescriptionCategoryId &&
-        SelectedOzonType?.TypeId == _ozonSchema.TypeId;
-
-    private void ResetProductMappingPreview(string status)
+    private void RefreshCleaningInput()
     {
-        BindingRows.Clear(); BindingJson = ""; _bindingSource = null;
-        BindingStatus = "商品或 Schema 已变化，请重新生成初步方案。";
-        ProductMappingRows.Clear();
-        ProductMappingIssues.Clear();
-        ProductSkuIdentityRows.Clear();
-        ProductSkuPlanStatus = "等待 SKU 采集结果。";
-        RuleDictionaryStatus = "当前不查询字典。";
-        FieldMatchingFinalOutputJson = "请先运行规则映射。";
-        FieldMatchingFinalStatus = status;
-    }
-
-    private void RefreshFieldMatchingInput()
-    {
-        ResetProductMappingPreview("商品或 Schema 已更新，请重新运行规则映射。");
-        FieldMatchingFacts.Clear();
-        if (SelectedFieldMatchingDetail is null)
+        InvalidateCleaningResult();
+        SourceFacts.Clear();
+        if (SelectedCleaningDetail is null)
         {
-            _latestFieldMatchingInput = null;
-            ClearFieldMatchingPreview("当前没有可供字段匹配的详情结果。");
+            ClearCleaningPreview("当前没有可供数据清洗的详情结果。");
             return;
         }
 
-        var categoryPath = SelectedOzonCategory is not null && SelectedOzonType is not null
-            ? $"{SelectedOzonCategory.DisplayName} > {SelectedOzonType.Name}"
-            : null;
-        var input = FieldMatchingInputBuilder.Create(
-            string.IsNullOrWhiteSpace(_latestCollectionId) ? "current-session" : _latestCollectionId,
-            $"preview-{SelectedFieldMatchingDetail.ItemPosition:000}",
-            SelectedFieldMatchingDetail,
-            _ozonSchema,
-            categoryPath,
-            _ozonSchema is not null && categoryPath is not null);
-        _latestFieldMatchingInput = input;
-        var cleaned = CleanedProductBuilder.Create(input);
-        CleanedProductJson = JsonSerializer.Serialize(
-            cleaned, ProductMappingJson.IndentedOptions);
-        foreach (var fact in input.Source.Facts.Where(f => f.Kind is "title" or "attribute")) FieldMatchingFacts.Add(fact);
-
-        FieldMatchingInputJson = "请先读取当前 Ozon Schema，再预览规则输入 JSON。";
-        if (input.Target.Attributes.Count > 0)
+        var source = RuleSourceBuilder.Create(SelectedCleaningDetail);
+        _currentSource = source;
+        CleanProductCommand.NotifyCanExecuteChanged();
+        foreach (var (label, value) in source.Facts) SourceFacts.Add(new(label, value));
+        foreach (var axis in source.Skus.SelectMany(s => s.SpecValues.Keys).Distinct())
         {
-            try
-            {
-                var preview = ProductMappingInputBuilder.Create(input, $"preview-v2-{input.ProductRef.OfferId}");
-                ShowSkuIdentityPlan(preview.Request);
-                FieldMatchingInputJson = JsonSerializer.Serialize(
-                    preview.Request, ProductMappingJson.IndentedOptions);
-                FieldMatchingFacts.Clear();
-                foreach (var fact in preview.Request.Facts)
-                    FieldMatchingFacts.Add(new(fact.FactId, fact.ScopeKey, fact.Label, fact.Value, fact.Source, fact.SourcePath));
-                foreach (var issue in preview.SourceIssues) ProductMappingIssues.Add(issue);
-            }
-            catch (ArgumentException error)
-            {
-                ProductMappingIssues.Add(new("error", "input.invalid", "product", null, error.Message));
-            }
+            if (source.Facts.ContainsKey(axis)) continue;
+            SourceFacts.Add(new(axis, string.Join("、", source.Skus.Select(s => s.SpecValues.GetValueOrDefault(axis)).OfType<string>().Distinct())));
         }
-        var targetText = input.Target.Attributes.Count == 0
-            ? "尚未读取 Ozon Schema"
-            : $"Ozon 目标字段 {input.Target.Attributes.Count} 项（必填 {input.Target.Attributes.Count(item => item.IsRequired)}）";
-        FieldMatchingStatus =
-            $"商品 #{input.ProductRef.ItemPosition} · 数据清洗：确认 {cleaned.ConfirmedFacts.Count} 条、待确认 {cleaned.UncertainFacts.Count} 条、规格组合 {cleaned.SkuCombinations.Count} 个 · " +
-            $"{input.Source.Facts.Count} 条属性事实 · " +
-            $"{input.Source.Media.Count} 张图片 · {input.Source.PriceEvidence.Count} 条价格证据 · " +
-            $"{input.Source.SkuEvidence.Count} 条 SKU 证据 · " +
-            $"{input.Source.SkuCombinations.Count} 个 SKU 组合（{input.Source.SkuMatrixStatus}）；{targetText}。";
+
+        CleaningSourceStatus = $"商品 #{SelectedCleaningDetail.ItemPosition} · offerId {source.OfferId} · 源属性 {SourceFacts.Count} 项 · SKU {source.Skus.Count} 个 · 清洗目标：{SelectedOzonCategory?.DescriptionCategoryId.ToString() ?? "未选择类目"} / {SelectedOzonType?.TypeId.ToString() ?? "未选择类型"}";
     }
 
-    private void ShowSkuIdentityPlan(ProductMappingRequest request)
+    private void ClearCleaningPreview(string status)
     {
-        ProductSkuIdentityRows.Clear();
-        foreach (var sku in request.Skus)
-            ProductSkuIdentityRows.Add(new(
-                sku.VariantKey,
-                sku.MerchantSku,
-                sku.IdentityStrategy,
-                sku.SourceCombinationKey,
-                sku.SourceSkuId,
-                sku.Options));
-        ProductSkuPlanStatus = request.Skus.Count == 0
-            ? $"商品组 {request.ProductGroupKey}：没有 SKU 组合，不生成变体身份。"
-            : $"商品组 {request.ProductGroupKey}：已为 {request.Skus.Count} 个 SKU 组合生成稳定商家 SKU。";
+        SourceFacts.Clear();
+        _currentSource = null;
+        InvalidateCleaningResult();
+        CleaningSourceStatus = status;
     }
-
-    private void ClearFieldMatchingPreview(string status)
-    {
-        ResetProductMappingPreview(status);
-        FieldMatchingFacts.Clear();
-        _latestFieldMatchingInput = null;
-        CleanedProductJson = "选择一个已采集的商品以查看数据清洗结果。";
-        FieldMatchingInputJson = "尚未生成字段匹配输入。";
-        FieldMatchingFinalOutputJson = "尚未生成统一最终输出。";
-        FieldMatchingFinalStatus = "等待字段匹配输入和引擎计划。";
-        FieldMatchingStatus = status;
-    }
-
-    private static DetailFactSnapshotDto? CreateDetailSnapshot(
-        DetailCollectionResultDto? detail,
-        string? fallbackCapturedAt = null) =>
-        detail is null
-            ? null
-            : new DetailFactSnapshotDto(
-                detail.FinalUrl ?? detail.DetailUrl ?? string.Empty,
-                detail.CapturedAt ?? fallbackCapturedAt ?? DateTimeOffset.UtcNow.ToString("O"),
-                detail.PageTitle,
-                detail.Facts,
-                detail.Diagnostics,
-                detail.Raw);
 
     private static int GetUnresolvedDetailUrlCount(JsonElement? diagnostics)
     {
@@ -706,22 +589,19 @@ public partial class MainViewModel : ObservableObject
     partial void OnIsBusyChanged(bool value)
     {
         SearchCommand.NotifyCanExecuteChanged();
-        PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
+        CleanProductCommand.NotifyCanExecuteChanged();
+        ExportCleanedProductCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnOzonClientIdChanged(string value)
     {
-        ResetProductMappingPreview("Ozon 凭证已变化，请重新执行映射。");
         LoadOzonSchemaCommand.NotifyCanExecuteChanged();
-        PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
         ScheduleOzonSettingsSave();
     }
 
     partial void OnOzonApiKeyChanged(string value)
     {
-        ResetProductMappingPreview("Ozon 凭证已变化，请重新执行映射。");
         LoadOzonSchemaCommand.NotifyCanExecuteChanged();
-        PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
         ScheduleOzonSettingsSave();
     }
 
@@ -750,21 +630,14 @@ public partial class MainViewModel : ObservableObject
         ScheduleOzonSettingsSave();
     }
 
-    partial void OnSelectedFieldMatchingDetailChanged(DetailCollectionResultDto? value)
+    partial void OnSelectedCleaningDetailChanged(DetailCollectionResultDto? value)
     {
-        _latestDetailSnapshot = CreateDetailSnapshot(value);
-        RefreshFieldMatchingInput();
-        ResetRuleMappingOutput(value is null
-            ? "请选择一个详情商品后再预览规则输入 JSON。"
-            : "字段匹配商品已切换；请基于当前商品重新运行规则映射。");
-        RefreshRuleReadinessStatus();
+        RefreshCleaningInput();
     }
 
     partial void OnIsLoadingOzonSchemaChanged(bool value)
     {
-        if (value) ResetProductMappingPreview("正在刷新 Schema，请完成后重新映射。");
         LoadOzonSchemaCommand.NotifyCanExecuteChanged();
-        PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
     }
 
     private void ResetOzonSchemaForSelection()
@@ -778,26 +651,7 @@ public partial class MainViewModel : ObservableObject
             : SelectedOzonType is null
                 ? $"已选择品类：{SelectedOzonCategory.DisplayName}；请选择商品类型。"
                 : $"已选择：{SelectedOzonCategory.DisplayName} > {SelectedOzonType.Name}；可以验证凭证并读取 Schema。";
-        ResetRuleMappingOutput("Ozon 品类或类型已变化，请重新读取 Schema 后再预览规则输入 JSON。");
-        RefreshFieldMatchingInput();
-        PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
-    }
-
-    private void ResetRuleMappingOutput(string status)
-    {
-        RuleMappingStatus = status;
-        RuleDictionaryStatus = "当前不查询字典。";
-        ResetProductMappingPreview(status);
-        PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
-    }
-
-    private void RefreshRuleReadinessStatus()
-    {
-RuleMappingStatus = _ozonSchema is null
-            ? "请先读取当前 Ozon Schema。"
-            : _latestDetailSnapshot is null
-                ? "请先采集 1688 详情事实。"
-                : "可以在字段匹配页生成并检查输入 JSON。";
+        RefreshCleaningInput();
     }
 
     partial void OnCommissionRatePercentChanged(decimal value) => RefreshCostAnalysis();

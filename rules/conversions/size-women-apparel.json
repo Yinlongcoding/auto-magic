@@ -1,0 +1,12 @@
+{
+  "name": "size-women-apparel",
+  "mappings": {
+    "XS": "40",
+    "S": "42",
+    "M": "44",
+    "L": "46",
+    "XL": "48",
+    "XXL": "50",
+    "XXXL": "52"
+  }
+}

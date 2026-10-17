@@ -1,62 +1,211 @@
-# 规则文件设计约定
+# 规则引擎结构
 
-本目录按已确认的理论方案整理。应用解析器尚未适配本格式，本文不代表应用已支持以下行为。
+规则文件路径由环境变量 `AUTO_MAGIC_RULES_DIRECTORY` 指定，未配置时默认为：
 
-## 目录职责
+- 开发环境：仓库根目录下的 `rules/`
+- 发布版本：`%LOCALAPPDATA%\AutoMagic\rules\`
 
-```text
+## 文件结构
+
+```
 rules/
-  common/
-    index.json
-    rules/
-      gender.json
-      country.json
-  categories/
-    200000933/
-      index.json
-      types/
-        93182.json
+├── attributes/          # 通用属性规则，按属性 ID 命名
+│   ├── 31.json          # 品牌
+│   ├── 4295.json        # 俄罗斯尺码
+│   ├── 4389.json        # 原产国
+│   ├── 8229.json        # 商品类型 ID (system: type-id)
+│   ├── 8292.json        # 卡片组 (system: card-group)
+│   ├── 9163.json        # 性别
+│   ├── 9533.json        # 厂商尺码（自由文本）
+│   ├── 10096.json       # 产品颜色（字典）
+│   └── 10097.json       # 颜色名称（自由文本，AI 翻译）
+├── overrides/
+│   ├── categories/      # 品类覆盖，按品类 ID 命名
+│   │   └── {categoryId}.json
+│   └── types/           # 类型覆盖，按类型 ID 命名
+│       └── 93182.json   # 女装连衣裙：性别默认"女性"，尺码使用女装换算
+├── conversions/         # 换算表，按名称命名
+│   ├── size-women-apparel.json
+│   └── size-men-apparel.json
+└── dictionaries/        # 字典同义词，按字典 ID 命名
+    ├── 320.json         # 性别 9163 (待完善)
+    ├── 835.json         # 俄罗斯尺码 4295 (待完善)
+    ├── 1494.json        # 商品颜色 10096 (待完善)
+    └── 1935.json        # 原产国 4389 (待完善)
 ```
 
-- type 文件声明该类型的属性及显式引用，不维护实际值映射。当前 93182 文件只包含性别和国家两个属性，其他属性待后续确认补充，不视为完整上架方案。
-- category/index.json 定义当前类目内的属性语义、引用和默认值。只有 type 显式引用的属性才会使用这里的配置，不进行隐式继承。
-- common/index.json 将公共模块名称映射到实际文件。
-- common/rules/*.json 保存中文 match、目标 targetValue 和 valueId。
+## 规则优先级
 
-## 路径解析
+属性规则按以下三层合并，高层覆盖低层（字段级别，未设置的字段保留低层的值）：
 
-path 是逻辑引用，不是直接替换成文件路径的字符串：
+1. `attributes/{attributeId}.json` — 通用规则（最低层）
+2. `overrides/categories/{categoryId}.json` — 品类覆盖
+3. `overrides/types/{typeId}.json` — 类型覆盖（最高层）
 
-- category 表示按当前 type.categoryId 加载的 categories/{categoryId}/index.json。
-- common 表示 common/index.json。
-- 点号后面的各段按 JSON 对象键精确读取；9163 是字符串属性键。semantic 用于说明属性含义，不用于搜索或猜测目标节点。
-- 如果目标是属性配置对象，继续沿其 path 解析；如果目标是 common.modules 下的文件路径，则相对于 common/index.json 所在目录加载字典。
-- 最终字典的 attributeId 必须与 type 声明的属性 ID 一致。公共字典是否可用于某一类目、类型还需结合目标 Schema 的字典和适用性核验，不能仅凭属性 ID 相同认定通用。
-- 只读取声明的引用，不扫描其他目录补找。断链、循环、文件缺失和 JSON 结构错误属于配置错误，应明确报告。
+## 属性规则 schema
 
-当前性别链路：
-
-```text
-types/93182.json 的 attributes["9163"]
-→ category.attributes.9163
-→ common.modules.gender
-→ common/rules/gender.json
-→ 用输入中文查询 match，取得 targetValue/valueId
+```jsonc
+{
+  "attributeId": 31,
+  "name": "品牌",               // 显示名称，可选
+  "fields": ["品牌"],           // 源字段列表，按优先级排序，先查 SKU 级 spec 轴，再查商品级 facts
+  "fallback": "无品牌",         // 当所有源字段都缺失时使用的默认值，可选
+  "system": null,               // "card-group" 或 "type-id"，系统生成规则，设置后其他字段无效
+  "conversion": null,           // 换算表名称（conversions/{name}.json），可选
+  "when": [                     // 条件分支，按顺序匹配，首个命中的分支生效
+    {
+      "source": "性别",         // 源字段名称（与 attribute 二选一）
+      "attribute": null,        // 依赖的其他属性 ID（与 source 二选一）
+      "equals": "女",           // 匹配值（source 或 attribute 的清洗后值）
+      "value": "女性",          // 命中时返回的固定值（与 conversion 二选一）
+      "conversion": null        // 命中时应用的换算表（与 value 二选一）
+    }
+  ],
+  "otherwise": null             // 没有命中任何 when 分支时的值，可选；未设置则为空
+}
 ```
 
-当前国家链路直接从 type 引用 common.modules.country，不经过 category 的属性配置。
+## 覆盖文件 schema
 
-## 统一默认值规则
+品类和类型覆盖文件结构相同，只设置需要修改的字段（字段级覆盖）：
 
-默认值是匹配引擎的统一约定，属性只保存 defaultValue，不重复配置 defaultWhen。
+```jsonc
+{
+  "categoryId": 200000933,   // 品类覆盖必须设置 categoryId
+  "typeId": null,            // 品类覆盖不设置 typeId
+  "attributes": {
+    "9163": {                // 属性 ID 作为键
+      "fallback": "女性"      // 只覆盖 fallback，其他字段保留通用规则的值
+    },
+    "4295": {
+      "when": [              // 完整替换 when 分支列表
+        {
+          "attribute": 9163,
+          "equals": "女性",
+          "conversion": "size-women-apparel"
+        }
+      ]
+    }
+  }
+}
+```
 
-1. 源值有效且唯一匹配时，使用源值的映射结果。
-2. 源值缺失、未通过明确的有效性校验，或没有匹配项时，若当前引用链的属性配置声明了 defaultValue，使用默认值重新匹配同一字典。
-3. 未声明默认值，或默认值无法唯一匹配时，结果留空。源值存在多个候选属于歧义，留空供人工处理，不选择第一项，也不使用默认值掩盖冲突。
-4. 路径或文件等配置错误不触发默认值；默认值不能直接充当 valueId。
+类型覆盖文件将 `categoryId` 改为 `typeId`。
 
-当前 defaultValue="女性" 位于类目 200000933 的属性 9163，因此任何显式引用该属性配置的 type 都会使用这一默认策略；直接引用 common.modules.gender 的 type 不会自动获得该默认值。
+## 换算表 schema
 
-当前国家字典的重复 match 由人工后续处理，本次保留原始映射，不自动消歧。
+```jsonc
+{
+  "name": "size-women-apparel",
+  "mappings": {
+    "XS": "40",
+    "S": "42",
+    "M": "44",
+    "L": "46",
+    "XL": "48",
+    "XXL": "50",
+    "XXXL": "52"
+  }
+}
+```
 
-源字段绑定、转换、有效性校验以及多层默认值冲突处理的具体配置结构尚待后续确认，本次不新增对应字段或执行逻辑。
+换算表中未列出的值在清洗阶段留空，等待人工补充。
+
+## 字典同义词 schema
+
+```jsonc
+{
+  "dictionaryId": 320,
+  "entries": [
+    {
+      "valueId": 971082156,    // Ozon 字典值 ID
+      "label": "女性",          // 规则文件和 UI 中使用的规范形式
+      "match": [               // 源数据中可能出现的同义词列表
+        "女",
+        "女性",
+        "女款",
+        "女装"
+      ]
+    }
+  ]
+}
+```
+
+匹配时 `label` 和 `match` 列表均参与查找；人工维护时只需填写 `match` 数组。
+
+同一个文本不能同时指向多个 valueId（加载时报错）。
+
+## 字典适用性检查
+
+字典值匹配后，引擎会查询 `%LOCALAPPDATA%\AutoMagic\dictionary-cache\{categoryId}\{typeId}\{dictionaryId}.json` 核对 valueId 是否适用于当前类目和类型。
+
+缓存文件格式与 Ozon `/v1/description-category/attribute/values` 响应一致：
+
+```json
+{ "result": [ { "id": 971082156, "value": "Женский" }, ... ] }
+```
+
+缓存缺失时 `MatchingEngine` 返回 `Unmatched`，并在 note 中说明原因。
+
+## 规则引擎行为
+
+### 清洗阶段 (CleaningEngine)
+
+生成中文值，按以下顺序执行：
+
+1. 加载当前类型的完整属性规则（通用 + 品类覆盖 + 类型覆盖）
+2. 对每个 SKU：
+   - 拓扑排序所有属性（`DependencyResolver`），确保 `when.attribute` 依赖的属性先执行
+   - 按排序顺序清洗每个属性：
+     - `system: "card-group"` → `1688-{offerId}`
+     - `system: "type-id"` → 当前 typeId
+     - `when` 分支：按顺序检查条件，命中首个分支后停止，返回 `value` 或应用 `conversion`
+     - 否则读取 `fields` 列表（先查 SKU spec 轴，再查商品 facts）
+     - 应用 `conversion`（未列出的值留空）
+     - 源字段缺失且无 `conversion` 时使用 `fallback`
+3. 输出 `CleanedProduct`，包含每个 SKU 的中文属性值及来源信息
+
+### 匹配阶段 (MatchingEngine)
+
+将中文值转为 Ozon valueId：
+
+1. 对每个清洗值：
+   - 自由文本属性（`dictionaryId == 0`）：直接通过，状态 `FreeText`
+   - 预设 valueId（`type-id`）：直接通过，状态 `Matched`
+   - 字典属性：
+     - 加载 `dictionaries/{dictionaryId}.json`
+     - 查找 `label` 或 `match` 中的匹配项
+     - 检查 valueId 是否在 `dictionary-cache` 中（适用性）
+     - 命中且适用：状态 `Matched`
+     - 命中但不适用或字典中无此值：状态 `Unmatched`
+2. 输出 `MatchedProduct`，包含每个值的 valueId、状态和 `IsBlocking`（必填但无值）
+
+### 错误处理
+
+- **RuleConfigurationException**：规则文件错误（JSON 格式、循环依赖、缺少必填规则、换算表不存在）
+- **必填属性无规则**：清洗前检查，缺少规则时抛出异常（配置错误，不是商品问题）
+- **必填属性无值**：匹配后标记为 `IsBlocking`，商品不能提交，需人工补充
+
+## UI 展示
+
+`CleaningRow` 按属性和去重后的值分组（共享的商品级属性只显示一次），显示：
+
+- 属性名称和 ID
+- 级别：`商品`（所有 SKU 共享）或 `SKU`（来自 spec 轴）
+- 影响的 SKU 数量
+- 源字段和源值
+- 清洗后的中文值
+- valueId（匹配成功时）
+- 状态：`已匹配` / `自由文本` / `未匹配` / `缺失`
+- 阻断标记：必填但无值
+- 详情：来源、换算表、note
+
+## 规则变更报告要求
+
+每当修改规则文件（添加、修改、删除属性规则、覆盖、换算表、字典同义词）时，需在任务最终响应中报告：
+
+- 受影响的规则文件和范围（通用/品类/类型）
+- 变更前后的行为差异
+- 执行的验证（编译、测试、数据检查）
+
+详见 `AGENTS.md` 中的"Rule change reporting"。

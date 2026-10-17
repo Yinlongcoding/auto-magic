@@ -39,6 +39,8 @@ public sealed record OzonCategorySchema(
     IReadOnlyList<OzonAttributeDefinition> Attributes)
 {
     public int RequiredCount => Attributes.Count(attribute => attribute.IsRequired);
+
+    public int AspectCount => Attributes.Count(attribute => attribute.IsAspect);
 }
 
 public sealed record OzonAttributeDefinition(
@@ -49,6 +51,7 @@ public sealed record OzonAttributeDefinition(
     string Type,
     bool IsCollection,
     bool IsRequired,
+    bool IsAspect,
     long DictionaryId,
     int MaxValueCount,
     string GroupName);

@@ -1,0 +1,12 @@
+{
+  "typeId": 93182,
+  "attributes": {
+    "31": { "fallback": "无品牌" },
+    "9163": { "fallback": "女性" },
+    "4295": {
+      "when": [
+        { "attribute": 9163, "equals": "女性", "conversion": "size-women-apparel" }
+      ]
+    }
+  }
+}

@@ -4,13 +4,13 @@ using System.Windows;
 using AutoMagic.Application.ExchangeRates;
 using AutoMagic.Application.Search;
 using AutoMagic.Application.Ozon;
-using AutoMagic.Application.Ozon.Mapping;
+using AutoMagic.Application.Ozon.Rules;
 using AutoMagic.Desktop.ViewModels;
 using AutoMagic.Infrastructure.Bridge;
 using AutoMagic.Infrastructure.Collection;
 using AutoMagic.Infrastructure.ExchangeRates;
 using AutoMagic.Infrastructure.Ozon;
-using AutoMagic.Infrastructure.Ozon.Mapping;
+using AutoMagic.Infrastructure.Ozon.Rules;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -58,8 +58,12 @@ public partial class App : System.Windows.Application
             client.Timeout = TimeSpan.FromSeconds(20);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("AutoMagic/0.2");
         }).RedactLoggedHeaders(_ => true);
-        builder.Services.AddSingleton<IFieldMappingStore>(_ => new JsonFieldMappingStore(ResolveRulesPath()));
-        builder.Services.AddTransient<FieldMappingService>();
+        builder.Services.AddSingleton<IRuleStore>(_ => new JsonRuleStore(ResolveRulesPath()));
+        builder.Services.AddSingleton<RuleLoader>();
+        builder.Services.AddSingleton<IDictionaryValueCache>(_ => new FileDictionaryValueCache(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AutoMagic", "dictionary-cache")));
+        builder.Services.AddTransient<CleaningEngine>();
+        builder.Services.AddTransient<MatchingEngine>();
         builder.Services.AddSingleton<ILocalOzonCategoryCatalog>(_ =>
             new LocalOzonCategoryCatalog(
                 Path.Combine(AppContext.BaseDirectory, "Data", "ozon-category-tree.test.json")));

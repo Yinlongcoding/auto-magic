@@ -23,15 +23,13 @@ public partial class MainViewModel
                 return;
             }
             _ozonSchema = schema;
+            CleanProductCommand.NotifyCanExecuteChanged();
             OzonAttributes.Clear();
             foreach (var attribute in schema.Attributes) OzonAttributes.Add(attribute);
             OzonSchemaJson = JsonSerializer.Serialize(schema, BridgeJson.IndentedOptions);
-            OzonSchemaStatus = $"开发缓存：已加载 {schema.Attributes.Count} 个属性，获取于 {schema.CapturedAt.ToLocalTime():yyyy-MM-dd HH:mm}；可手动刷新。";
-            RefreshFieldMatchingInput();
-            RefreshRuleReadinessStatus();
-            PreviewFieldBindingsCommand.NotifyCanExecuteChanged();
+            OzonSchemaStatus = $"开发缓存：已加载 {schema.Attributes.Count} 个属性，必填 {schema.RequiredCount} 个、变体 {schema.AspectCount} 个，获取于 {schema.CapturedAt.ToLocalTime():yyyy-MM-dd HH:mm}；可手动刷新。";
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
         {
             OzonSchemaStatus = $"缓存读取失败：{error.Message}；请手动请求刷新 Schema。";
         }

@@ -7,7 +7,4 @@
     <Project Path="src/AutoMagic.Infrastructure/AutoMagic.Infrastructure.csproj" />
     <Project Path="src/AutoMagic.NativeHost/AutoMagic.NativeHost.csproj" />
   </Folder>
-  <Folder Name="/verification/">
-    <Project Path="verification/AutoMagic.RuleReview.Checks/AutoMagic.RuleReview.Checks.csproj" />
-  </Folder>
 </Solution>
