@@ -1,0 +1,113 @@
+<Page x:Class="AM.Desktop.Views.BatchesPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:vm="clr-namespace:AM.Desktop.ViewModels"
+      mc:Ignorable="d"
+      d:DataContext="{d:DesignInstance Type=vm:BatchesViewModel}"
+      Title="采集上架">
+    <Page.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    </Page.Resources>
+
+    <Grid Margin="16,8,16,16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- 左边：批次列表，可折叠 -->
+        <DockPanel Width="260" Margin="0,0,16,0"
+                   Visibility="{Binding IsBatchListOpen, Converter={StaticResource BoolToVisibility}}">
+            <ui:Button DockPanel.Dock="Top" Content="新建采集" Appearance="Primary"
+                       Icon="{ui:SymbolIcon Add24}" HorizontalAlignment="Stretch" Margin="0,0,0,8"
+                       Command="{Binding NewBatchCommand}"
+                       ToolTip="{Binding NewBatchTip}" ToolTipService.ShowOnDisabled="True" />
+            <TextBlock DockPanel.Dock="Top" Text="{Binding PluginStatus}" Margin="0,0,0,8" FontSize="12"
+                       TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <ListBox ItemsSource="{Binding Batches}" SelectedItem="{Binding SelectedBatch}"
+                     AutomationProperties.Name="采集批次">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Margin="0,4">
+                            <TextBlock Text="{Binding Keyword}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding ListText}" Margin="0,2,0,0" FontSize="12"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+
+        <!-- 右边：选中批次的详情 -->
+        <DockPanel Grid.Column="1">
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                <ui:Button DockPanel.Dock="Left" Appearance="Transparent" Margin="0,0,8,0"
+                           Icon="{ui:SymbolIcon PanelLeftContract24}"
+                           Command="{Binding ToggleBatchListCommand}"
+                           ToolTip="折叠或展开批次列表" AutomationProperties.Name="折叠或展开批次列表" />
+                <StackPanel Visibility="{Binding IsBatchSelected, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock FontSize="20" FontWeight="SemiBold">
+                        <Run Text="{Binding SelectedBatch.Keyword, Mode=OneWay}" />
+                        <Run Text="{Binding SelectedBatch.CategoryPath, Mode=OneWay}" FontSize="14" FontWeight="Normal"
+                             Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    </TextBlock>
+                    <TextBlock Margin="0,2,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                        <Run Text="定价参数（已冻结）：" /><Run Text="{Binding SelectedBatch.PricingSummary, Mode=OneWay}" />
+                    </TextBlock>
+                </StackPanel>
+            </DockPanel>
+
+            <TextBlock DockPanel.Dock="Top" Text="还没有采集批次。点“新建采集”开始。"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Visibility="{Binding HasNoBatch, Converter={StaticResource BoolToVisibility}}" />
+
+            <ui:InfoBar DockPanel.Dock="Top" Margin="0,0,0,8" IsClosable="False" Severity="Informational"
+                        IsOpen="{Binding IsReadOnly}" Message="{Binding ReadOnlyMessage}" />
+
+            <ui:InfoBar DockPanel.Dock="Top" Margin="0,0,0,8" IsClosable="False" Severity="Warning"
+                        IsOpen="{Binding HasWarning, Mode=OneWay}" Message="{Binding SelectedBatch.Warning, Mode=OneWay}" />
+
+            <!-- 四个步骤页签 -->
+            <TabControl SelectedIndex="{Binding SelectedTabIndex}"
+                        Visibility="{Binding IsBatchSelected, Converter={StaticResource BoolToVisibility}}">
+                <TabItem Header="{Binding CollectHeader}">
+                    <DockPanel Margin="0,12,0,0">
+                        <ui:Card DockPanel.Dock="Top" Padding="12" Margin="0,0,0,8"
+                                 Visibility="{Binding IsCollecting, Converter={StaticResource BoolToVisibility}}">
+                            <DockPanel>
+                                <ui:Button DockPanel.Dock="Right" Content="停止" Appearance="Danger"
+                                           Icon="{ui:SymbolIcon Stop24}" Command="{Binding StopCommand}" />
+                                <TextBlock VerticalAlignment="Center">
+                                    <Run Text="正在采集：" /><Run Text="{Binding SelectedBatch.ProgressText, Mode=OneWay}" />
+                                </TextBlock>
+                            </DockPanel>
+                        </ui:Card>
+                        <DataGrid ItemsSource="{Binding Products}" AutoGenerateColumns="False" IsReadOnly="True"
+                                  HeadersVisibility="Column" CanUserAddRows="False">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="中文标题" Binding="{Binding Title}" Width="*" />
+                                <DataGridTextColumn Header="SKU 数" Binding="{Binding SkuCount}" Width="80" />
+                                <DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="100" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </TabItem>
+                <TabItem Header="{Binding PendingHeader}" IsEnabled="{Binding IsCollected}">
+                    <TextBlock Margin="16" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="待处理：属性、物流参数、价格异常、AI 失败四个分段（待实现）" />
+                </TabItem>
+                <TabItem Header="{Binding CopyHeader}" IsEnabled="{Binding IsCollected}">
+                    <TextBlock Margin="16" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="文案：缩略图、中文原标题、俄文标题，需点“本批文案已审阅”（待实现）" />
+                </TabItem>
+                <TabItem Header="{Binding SubmitHeader}" IsEnabled="{Binding CanSubmit}">
+                    <TextBlock Margin="16" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="提交：SKU 列表、价格列、提交所选和确认弹窗（待实现）" />
+                </TabItem>
+            </TabControl>
+        </DockPanel>
+    </Grid>
+</Page>

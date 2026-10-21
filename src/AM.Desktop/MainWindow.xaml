@@ -1,0 +1,31 @@
+﻿<ui:FluentWindow x:Class="AM.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:views="clr-namespace:AM.Desktop.Views"
+        Title="Auto Magic" Height="800" Width="1280" MinHeight="560" MinWidth="960"
+        WindowStartupLocation="CenterScreen"
+        ExtendsContentIntoTitleBar="True"
+        WindowBackdropType="Mica"
+        WindowCornerPreference="Round">
+    <DockPanel>
+        <ui:TitleBar DockPanel.Dock="Top" Title="Auto Magic" />
+
+        <!-- 左侧导航，可折叠为只显示图标 -->
+        <ui:NavigationView x:Name="RootNavigation"
+                           PaneDisplayMode="Left"
+                           IsPaneToggleVisible="True"
+                           OpenPaneLength="200"
+                           CompactPaneLength="48"
+                           IsBackButtonVisible="Collapsed">
+            <ui:NavigationView.MenuItems>
+                <ui:NavigationViewItem Content="总览" Icon="{ui:SymbolIcon Home24}" TargetPageType="{x:Type views:OverviewPage}" />
+                <ui:NavigationViewItem Content="采集上架" Icon="{ui:SymbolIcon BoxMultiple24}" TargetPageType="{x:Type views:BatchesPage}" />
+                <ui:NavigationViewItem Content="任务记录" Icon="{ui:SymbolIcon History24}" TargetPageType="{x:Type views:HistoryPage}" />
+            </ui:NavigationView.MenuItems>
+            <ui:NavigationView.FooterMenuItems>
+                <ui:NavigationViewItem Content="设置" Icon="{ui:SymbolIcon Settings24}" TargetPageType="{x:Type views:SettingsPage}" />
+            </ui:NavigationView.FooterMenuItems>
+        </ui:NavigationView>
+    </DockPanel>
+</ui:FluentWindow>

@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AM.Bridge/AM.Bridge.csproj" />
+    <Project Path="src/AM.Desktop/AM.Desktop.csproj" />
+    <Project Path="src/AM.NativeHost/AM.NativeHost.csproj" />
+  </Folder>
+</Solution>
