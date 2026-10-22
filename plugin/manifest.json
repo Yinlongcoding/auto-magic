@@ -1,14 +1,16 @@
 {
   "manifest_version": 3,
   "name": "AM 采集",
-  "version": "0.1.0",
-  "description": "AM 桌面端的 1688 采集插件。当前为通信骨架，只产出假数据。",
-  "permissions": ["alarms", "nativeMessaging"],
+  "version": "0.2.1",
+  "description": "AM 桌面端的 1688 采集插件：按桌面端下发的任务搜索 1688 并读取商品详情。",
+  "permissions": ["alarms", "nativeMessaging", "scripting", "tabs"],
+  "host_permissions": ["https://*.1688.com/*"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "action": {
-    "default_title": "AM 采集"
+    "default_title": "AM 采集",
+    "default_popup": "popup.html"
   }
 }

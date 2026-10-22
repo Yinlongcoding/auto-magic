@@ -18,6 +18,9 @@ public static class BridgeProtocol
 
     public static class Types
     {
+        // 插件 → 桌面端：探活。桌面端收到就回 bridge.pong，用来区分"真的连着"和"只有本地端口对象"。
+        public const string BridgePing = "bridge.ping";
+
         // 桌面端 → 插件
         public const string CollectStart = "collect.start";
         public const string CollectStop = "collect.stop";
@@ -32,19 +35,26 @@ public static class BridgeProtocol
         public const string CollectStopped = "collect.stopped";
         public const string CollectFailed = "collect.failed";
 
+        // 桌面端 → 插件
+        public const string BridgePong = "bridge.pong";
+
         // NativeHost → 插件
         public const string BridgeStatus = "bridge.status";
+
+        // 插件 → 桌面端：页面探测结果，仅开发阶段使用，接入真实采集后删除。
+        public const string ProbeResult = "probe.result";
     }
 
     public static readonly IReadOnlySet<string> FromExtension = new HashSet<string>
     {
         Types.ExtensionHello, Types.CollectAccepted, Types.CollectProgress, Types.CollectItem,
         Types.CollectPassDone, Types.CollectFinished, Types.CollectStopped, Types.CollectFailed,
+        Types.ProbeResult, Types.BridgePing,
     };
 
     public static readonly IReadOnlySet<string> FromDesktop = new HashSet<string>
     {
-        Types.CollectStart, Types.CollectStop,
+        Types.CollectStart, Types.CollectStop, Types.BridgePong,
     };
 }
 

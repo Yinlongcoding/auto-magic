@@ -34,7 +34,7 @@
             </ui:Card>
 
             <TextBlock Text="个人设置" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,4" />
-            <TextBlock Text="界面示例，暂不保存、不能测试连接。密钥将来用 Windows DPAPI 加密保存，不回显。" Margin="0,0,0,8"
+            <TextBlock Text="密钥用 Windows DPAPI 加密保存在本机，不回显。AI 和 OSS 两组暂未接入。" Margin="0,0,0,8"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
 
             <ui:Card Padding="16" Margin="0,0,0,12">
@@ -49,17 +49,34 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <TextBlock Grid.ColumnSpan="2" Text="Ozon 店铺" FontWeight="SemiBold" Margin="0,0,0,12" />
                     <TextBlock Grid.Row="1" Text="Client-Id" Style="{StaticResource FieldLabel}" />
-                    <ui:TextBox Grid.Row="1" Grid.Column="1" Margin="0,0,0,8" AutomationProperties.Name="Client-Id" />
+                    <ui:TextBox Grid.Row="1" Grid.Column="1" Margin="0,0,0,8" AutomationProperties.Name="Client-Id"
+                                Text="{Binding ClientId, UpdateSourceTrigger=PropertyChanged}" />
                     <TextBlock Grid.Row="2" Text="API Key" Style="{StaticResource FieldLabel}" />
-                    <ui:PasswordBox Grid.Row="2" Grid.Column="1" Margin="0,0,0,8" AutomationProperties.Name="API Key" />
+                    <ui:PasswordBox x:Name="OzonApiKeyBox" Grid.Row="2" Grid.Column="1" Margin="0,0,0,8"
+                                    AutomationProperties.Name="API Key" PlaceholderText="{Binding ApiKeyPlaceholder}"
+                                    PasswordChanged="OnOzonApiKeyChanged" />
                     <TextBlock Grid.Row="3" Text="币种" Style="{StaticResource FieldLabel}" />
                     <ComboBox Grid.Row="3" Grid.Column="1" Width="160" HorizontalAlignment="Left" Margin="0,0,0,8"
                               ItemsSource="{Binding Currencies}" SelectedItem="{Binding SelectedCurrency}"
                               AutomationProperties.Name="币种" />
-                    <ui:Button Grid.Row="4" Grid.Column="1" Content="测试连接" IsEnabled="False" />
+                    <ui:Button Grid.Row="4" Grid.Column="1" Content="保存并测试连接" Appearance="Primary"
+                               Command="{Binding SaveOzonCommand}" />
+                    <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,8,0,0" TextWrapping="Wrap" Text="{Binding OzonStatus}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding OzonFailed}" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </Grid>
             </ui:Card>
 

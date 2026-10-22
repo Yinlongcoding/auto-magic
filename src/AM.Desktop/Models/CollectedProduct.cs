@@ -1,3 +1,4 @@
+using AM.Bridge;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace AM.Desktop.Models;
@@ -15,4 +16,7 @@ public sealed partial class CollectedProduct(int index, string title, int skuCou
 
     [ObservableProperty]
     private string _status = status;
+
+    /// <summary>插件发来的完整采集结果，内存暂存。接入 SQLite（M2）后落库。</summary>
+    public CollectedOffer? Offer { get; set; }
 }

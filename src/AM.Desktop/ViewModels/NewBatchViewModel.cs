@@ -11,15 +11,27 @@ namespace AM.Desktop.ViewModels;
 /// </summary>
 public sealed partial class NewBatchViewModel : ObservableObject
 {
-    public IReadOnlyList<string> Categories => SampleData.Categories;
-    public IReadOnlyList<string> SortOptions => SampleData.SortOptions;
+    public IReadOnlyList<OzonCategory> Categories => CategoryCache.Categories;
+    public IReadOnlyList<string> SortOptions => BatchStore.SortOptions;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Types))]
-    private string? _selectedCategory;
+    private OzonCategory? _selectedCategory;
 
     [ObservableProperty]
-    private string? _selectedType;
+    private OzonType? _selectedType;
+
+    public bool HasCategories => Categories.Count > 0;
+    public string RefreshCategoriesText => HasCategories ? "更新类目" : "加载类目";
+
+    [ObservableProperty]
+    private bool _isRefreshingCategories;
+
+    [ObservableProperty]
+    private string? _categoryMessage = CategoryUpdatedText();
+
+    [ObservableProperty]
+    private bool _categoryFailed;
 
     [ObservableProperty]
     private string _keyword = "";
@@ -28,7 +40,7 @@ public sealed partial class NewBatchViewModel : ObservableObject
     private double? _targetCount = 50;
 
     [ObservableProperty]
-    private string _selectedSort = SampleData.SortOptions[0];
+    private string _selectedSort = BatchStore.SortOptions[0];
 
     [ObservableProperty]
     private string? _typeError;
@@ -39,18 +51,53 @@ public sealed partial class NewBatchViewModel : ObservableObject
     [ObservableProperty]
     private string? _countError;
 
-    public IReadOnlyList<string> Types =>
-        SelectedCategory is not null && SampleData.Types.TryGetValue(SelectedCategory, out var types) ? types : [];
-
-    // 公式反推结果，真实计算在实现定价时对照 13 号文档。
-    public string DerivedPurchaseRange => "采购价区间 ¥8.50 到 ¥42.00（示例）";
+    public IReadOnlyList<OzonType> Types => SelectedCategory?.Types ?? [];
 
     /// <summary>成功开始采集后的新批次；取消时为 null。</summary>
     public CollectionBatch? Result { get; private set; }
 
     public event EventHandler? CloseRequested;
 
-    partial void OnSelectedCategoryChanged(string? value) => SelectedType = null;
+    partial void OnSelectedCategoryChanged(OzonCategory? value) => SelectedType = null;
+
+    /// <summary>用已保存的 Ozon 配置重新拉类目树。失败保留旧缓存。</summary>
+    [RelayCommand]
+    private async Task RefreshCategoriesAsync()
+    {
+        var settings = SettingsStore.LoadOzon();
+        if (!settings.IsComplete)
+        {
+            CategoryFailed = true;
+            CategoryMessage = "请先在设置里填写 Ozon 的 Client-Id 和 API Key。";
+            return;
+        }
+
+        IsRefreshingCategories = true;
+        CategoryFailed = false;
+        CategoryMessage = "正在从 Ozon 拉取类目…";
+        try
+        {
+            await CategoryCache.RefreshAsync(settings);
+            SelectedCategory = null;
+            CategoryMessage = CategoryUpdatedText();
+            OnPropertyChanged(nameof(Categories));
+            OnPropertyChanged(nameof(HasCategories));
+            OnPropertyChanged(nameof(RefreshCategoriesText));
+        }
+        catch (OzonApiException error)
+        {
+            CategoryFailed = true;
+            CategoryMessage = error.Message;
+        }
+        finally
+        {
+            IsRefreshingCategories = false;
+        }
+    }
+
+    private static string? CategoryUpdatedText() => CategoryCache.UpdatedAt is { } at
+        ? $"类目更新于 {at:yyyy-MM-dd HH:mm}"
+        : "还没有类目缓存，点“加载类目”。";
 
     [RelayCommand]
     private void Start()
@@ -67,9 +114,11 @@ public sealed partial class NewBatchViewModel : ObservableObject
         {
             Id = $"b-{DateTime.Now:HHmmss}",
             Keyword = Keyword.Trim(),
-            CategoryPath = $"{SelectedCategory} / {SelectedType}",
+            CategoryPath = $"{SelectedCategory!.Path} / {SelectedType!.Name}",
+            DescriptionCategoryId = SelectedCategory.DescriptionCategoryId,
+            TypeId = SelectedType.TypeId,
             CreatedAt = DateTime.Now,
-            PricingSummary = "佣金 15% · 物流 ¥18 · 目标利润 20% · 汇率 12.1（浮动 2%）",
+            PricingSummary = "未设置（定价尚未实现）",
             TargetCount = (int)TargetCount!.Value,
             Sort = SelectedSort,
             State = BatchState.Collecting,

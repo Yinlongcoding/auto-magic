@@ -75,6 +75,18 @@ public sealed class BridgeServer : IAsyncDisposable
                     Connected?.Invoke();
                     while (await LengthPrefixedJson.ReadAsync(pipe, cancellationToken) is { } envelope)
                     {
+                        // 探活直接在管道层回复，不依赖采集服务的状态。
+                        // 走 SendAsync 是为了和其它消息共用 N 写锁，避免并发写坏帧。
+                        if (envelope.Type == BridgeProtocol.Types.BridgePing)
+                        {
+                            await SendAsync(new BridgeEnvelope
+                            {
+                                RequestId = envelope.RequestId,
+                                Type = BridgeProtocol.Types.BridgePong,
+                            });
+                            continue;
+                        }
+
                         MessageReceived?.Invoke(envelope);
                     }
                 }

@@ -11,6 +11,7 @@
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" ResizeMode="NoResize"
         ExtendsContentIntoTitleBar="True" WindowBackdropType="Mica" WindowCornerPreference="Round">
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <Style x:Key="FieldLabel" TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,0,12,0" />
@@ -52,11 +53,34 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <TextBlock Text="类目" Style="{StaticResource FieldLabel}" VerticalAlignment="Top" Margin="0,8,12,0" />
-                    <ComboBox Grid.Column="1" Margin="0,0,0,12" ItemsSource="{Binding Categories}"
-                              SelectedItem="{Binding SelectedCategory}" AutomationProperties.Name="类目" />
+                    <!-- 可编辑下拉框：输入文字按前缀定位 -->
+                    <StackPanel Grid.Column="1" Margin="0,0,0,12">
+                        <ComboBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}"
+                                  IsEditable="True" IsTextSearchEnabled="True" IsEnabled="{Binding HasCategories}"
+                                  AutomationProperties.Name="类目" />
+                        <DockPanel Margin="0,4,0,0">
+                            <ui:Button DockPanel.Dock="Right" Content="{Binding RefreshCategoriesText}" Padding="8,2"
+                                       Appearance="Transparent" Command="{Binding RefreshCategoriesCommand}" />
+                            <ui:ProgressRing DockPanel.Dock="Right" Width="14" Height="14" IsIndeterminate="True" Margin="0,0,6,0"
+                                             Visibility="{Binding IsRefreshingCategories, Converter={StaticResource BoolToVisibility}}" />
+                            <TextBlock Text="{Binding CategoryMessage}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CategoryFailed}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DockPanel>
+                    </StackPanel>
                     <TextBlock Grid.Column="3" Text="类型" Style="{StaticResource FieldLabel}" VerticalAlignment="Top" Margin="0,8,12,0" />
                     <StackPanel Grid.Column="4" Margin="0,0,0,12">
-                        <ComboBox ItemsSource="{Binding Types}" SelectedItem="{Binding SelectedType}" AutomationProperties.Name="类型" />
+                        <ComboBox ItemsSource="{Binding Types}" SelectedItem="{Binding SelectedType}"
+                                  IsEditable="True" IsTextSearchEnabled="True" AutomationProperties.Name="类型" />
                         <TextBlock Text="{Binding TypeError}" Style="{StaticResource FieldError}" />
                     </StackPanel>
                     <TextBlock Grid.Row="1" Text="关键词" Style="{StaticResource FieldLabel}" VerticalAlignment="Top" Margin="0,8,12,0" />
@@ -73,14 +97,11 @@
                     <TextBlock Grid.Row="2" Text="排序" Style="{StaticResource FieldLabel}" />
                     <ComboBox Grid.Row="2" Grid.Column="1" Margin="0,0,0,12" ItemsSource="{Binding SortOptions}"
                               SelectedItem="{Binding SelectedSort}" AutomationProperties.Name="排序方式" />
-                    <StackPanel Grid.Row="2" Grid.Column="3" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,12">
-                        <ui:Button Content="更新类目" IsEnabled="False" />
-                        <TextBlock Text="上次更新：—" VerticalAlignment="Center" Margin="12,0,0,0"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                    </StackPanel>
                 </Grid>
-                <TextBlock Text="定价参数（开始采集后冻结，之后不能改）" FontWeight="SemiBold" Margin="0,8,0,12" />
-                <Grid>
+                <TextBlock Text="定价参数" FontWeight="SemiBold" Margin="0,8,0,4" />
+                <TextBlock Text="定价尚未实现：这些参数暂不保存、不参与采集，采集时不按价格筛选。" Margin="0,0,0,12"
+                           TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                <Grid IsEnabled="False">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" SharedSizeGroup="FieldLabel" />
                         <ColumnDefinition Width="*" />
@@ -94,11 +115,11 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <TextBlock Text="佣金率 %" Style="{StaticResource FieldLabel}" />
-                    <ui:NumberBox Grid.Column="1" Margin="0,0,0,12" Value="15" AutomationProperties.Name="佣金率" />
+                    <ui:NumberBox Grid.Column="1" Margin="0,0,0,12" AutomationProperties.Name="佣金率" />
                     <TextBlock Grid.Column="3" Text="物流成本 ¥" Style="{StaticResource FieldLabel}" />
-                    <ui:NumberBox Grid.Column="4" Margin="0,0,0,12" Value="18" AutomationProperties.Name="物流成本" />
+                    <ui:NumberBox Grid.Column="4" Margin="0,0,0,12" AutomationProperties.Name="物流成本" />
                     <TextBlock Grid.Row="1" Text="目标利润 %" Style="{StaticResource FieldLabel}" />
-                    <ui:NumberBox Grid.Row="1" Grid.Column="1" Margin="0,0,0,12" Value="20" AutomationProperties.Name="目标利润率" />
+                    <ui:NumberBox Grid.Row="1" Grid.Column="1" Margin="0,0,0,12" AutomationProperties.Name="目标利润率" />
                     <TextBlock Grid.Row="1" Grid.Column="3" Text="汇率 / 浮动%" Style="{StaticResource FieldLabel}" />
                     <Grid Grid.Row="1" Grid.Column="4" Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
@@ -106,8 +127,8 @@
                             <ColumnDefinition Width="8" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <ui:NumberBox Value="12.1" AutomationProperties.Name="汇率" />
-                        <ui:NumberBox Grid.Column="2" Value="2" AutomationProperties.Name="汇率浮动百分比" />
+                        <ui:NumberBox AutomationProperties.Name="汇率" />
+                        <ui:NumberBox Grid.Column="2" AutomationProperties.Name="汇率浮动百分比" />
                     </Grid>
                     <TextBlock Grid.Row="2" Text="利润率区间 %" Style="{StaticResource FieldLabel}" />
                     <Grid Grid.Row="2" Grid.Column="1" Margin="0,0,0,12">
@@ -116,9 +137,9 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <ui:NumberBox Value="10" AutomationProperties.Name="利润率下限" />
+                        <ui:NumberBox AutomationProperties.Name="利润率下限" />
                         <TextBlock Grid.Column="1" Text="到" VerticalAlignment="Center" Margin="8,0" />
-                        <ui:NumberBox Grid.Column="2" Value="35" AutomationProperties.Name="利润率上限" />
+                        <ui:NumberBox Grid.Column="2" AutomationProperties.Name="利润率上限" />
                     </Grid>
                     <TextBlock Grid.Row="2" Grid.Column="3" Text="售价区间 ₽" Style="{StaticResource FieldLabel}" />
                     <Grid Grid.Row="2" Grid.Column="4" Margin="0,0,0,12">
@@ -127,12 +148,11 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <ui:NumberBox Value="300" AutomationProperties.Name="售价下限" />
+                        <ui:NumberBox AutomationProperties.Name="售价下限" />
                         <TextBlock Grid.Column="1" Text="到" VerticalAlignment="Center" Margin="8,0" />
-                        <ui:NumberBox Grid.Column="2" Value="1500" AutomationProperties.Name="售价上限" />
+                        <ui:NumberBox Grid.Column="2" AutomationProperties.Name="售价上限" />
                     </Grid>
                 </Grid>
-                <TextBlock Text="{Binding DerivedPurchaseRange}" FontWeight="SemiBold" Margin="0,4,0,0" />
             </StackPanel>
         </ScrollViewer>
     </DockPanel>

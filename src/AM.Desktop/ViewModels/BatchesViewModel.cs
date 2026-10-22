@@ -25,7 +25,7 @@ public sealed partial class BatchesViewModel : ObservableObject
 
     private static CollectionService Collection => App.Collection;
 
-    public ObservableCollection<CollectionBatch> Batches => SampleData.Batches;
+    public ObservableCollection<CollectionBatch> Batches => BatchStore.Batches;
 
     [ObservableProperty]
     private bool _isBatchListOpen = true;
@@ -75,7 +75,7 @@ public sealed partial class BatchesViewModel : ObservableObject
     {
         null => [],
         { State: BatchState.Interrupted } => [],
-        { } b => SampleData.ProductsFor(b),
+        { } b => BatchStore.ProductsFor(b),
     };
 
     partial void OnSelectedBatchChanged(CollectionBatch? oldValue, CollectionBatch? newValue)
@@ -97,14 +97,14 @@ public sealed partial class BatchesViewModel : ObservableObject
         }
 
         Batches.Insert(0, batch);
-        SampleData.History.Insert(0, new(DateTime.Now, batch.Keyword, "开始采集", $"目标 {batch.TargetCount} 个商品"));
+        BatchStore.History.Insert(0, new(DateTime.Now, batch.Keyword, "开始采集", $"目标 {batch.TargetCount} 个商品"));
         SelectedBatch = batch;
 
         // 发送失败时服务已把批次标为中断。弹窗期间插件断开或已有采集，这里同样按中断处理。
         if (!await Collection.StartAsync(batch) && batch.State == BatchState.Collecting)
         {
             batch.State = BatchState.Interrupted;
-            SampleData.History.Insert(0, new(DateTime.Now, batch.Keyword, "中断采集，任务结束", "插件未连接，未开始"));
+            BatchStore.History.Insert(0, new(DateTime.Now, batch.Keyword, "中断采集，任务结束", "插件未连接，未开始"));
         }
 
         Refresh();

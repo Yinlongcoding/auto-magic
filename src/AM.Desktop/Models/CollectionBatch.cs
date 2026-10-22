@@ -10,6 +10,10 @@ public sealed partial class CollectionBatch : ObservableObject
     public required string Id { get; init; }
     public required string Keyword { get; init; }
     public required string CategoryPath { get; init; }
+
+    /// <summary>新建时冻结的 Ozon 类目和类型。</summary>
+    public long DescriptionCategoryId { get; init; }
+    public long TypeId { get; init; }
     public required DateTime CreatedAt { get; init; }
     public required string PricingSummary { get; init; }
 

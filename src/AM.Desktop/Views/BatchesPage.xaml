@@ -55,7 +55,7 @@
                              Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                     </TextBlock>
                     <TextBlock Margin="0,2,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}">
-                        <Run Text="定价参数（已冻结）：" /><Run Text="{Binding SelectedBatch.PricingSummary, Mode=OneWay}" />
+                        <Run Text="定价参数：" /><Run Text="{Binding SelectedBatch.PricingSummary, Mode=OneWay}" />
                     </TextBlock>
                 </StackPanel>
             </DockPanel>

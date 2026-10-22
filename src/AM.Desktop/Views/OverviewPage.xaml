@@ -24,7 +24,7 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="24,16,24,24">
             <TextBlock Text="总览" FontSize="24" FontWeight="SemiBold" />
-            <TextBlock Text="统计数字为示例，真实统计在未来版本实现。" Margin="0,4,0,16"
+            <TextBlock Text="批次数只统计本次运行。成功率和上架统计在接入数据库和提交功能后提供。" Margin="0,4,0,16"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
 
             <ItemsControl ItemsSource="{Binding Stats}">

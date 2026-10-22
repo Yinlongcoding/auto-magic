@@ -26,7 +26,7 @@
 
 ### M1 界面（假数据）
 
-用内存里的示例数据把每一页做出来，不接真实数据。范围见 19 号：
+用内存里的示例数据把每一页做出来，不接真实数据。范围见 19 号。（2026-10-22 接入真实采集后，示例批次、任务记录、统计数字和定价示例值已全部移除，内存存储改为 BatchStore。）
 
 - 新建任务表单（含公式反推采购价区间显示）。
 - 采集页：进度、商品列表、停止按钮和二次确认。
@@ -47,7 +47,8 @@
 - C# 端：AM.Bridge（新协议 collect.*，含停止消息）、AM.NativeHost（来自旧仓库，只改类型名）、桌面端 BridgeServer 和 CollectionService。
 - 分两步：
   1. 通信骨架（已完成，2026-10-21 用户在真实 Chrome 和桌面端联调通过）：plugin/ 只有 fake-collector.js 产出假商品，验证两遍抓取、健康检查跳过第 2 遍、停止。注册用 scripts/register-native-host.ps1。
-  2. 真实采集：用真实采集器替换 fake-collector.js，对外接口不变；CollectItemPayload 按 16 号补字段。
+  2. 页面探测（已完成，2026-10-22）：plugin/probe.js 只在用户点插件按钮时读取当前页，结果经 probe.result 存到 %LocalAppData%\AM\probes\。结论写入设计目录 16 号"实测结果"一节；采购价口径（原价第一档）写入 13 号第 6 项。接完真实采集后 probe.js、popup、probe.result 一起删除。
+  3. 真实采集（代码完成，2026-10-22，尚未在真实 1688 上运行）：plugin/collector.js（流程）和 page-readers.js（页面读取）替换了 fake-collector.js。拼搜索 URL、跳过广告卡片、详情页读 window.context，CollectItemPayload 带 CollectedOffer。详情图只存 detailUrl，不抓图片（用户已同意）。价格排序因 URL 参数未实测，暂从界面移除。首次真实运行已完成（2026-10-22，5/5 成功，结果见设计目录 16 号）。批次数据写到 %LocalAppData%\AM\batches\（开发用，M2 后删除）。
 - 采集规则：每商品最多抓两遍；第一遍结束后做一次健康检查，超阈值则跳过第二遍；数据在采集结束后一次性返回（16 号、19 号）。
 
 ### M4 验证采集
