@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using AM.Core.Pricing;
+using AM.Core.Rules;
 using AM.Desktop.Models;
 using AM.Desktop.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -79,33 +80,169 @@ public sealed partial class BatchesViewModel : ObservableObject
         { } b => BatchStore.ProductsFor(b),
     };
 
-    /// <summary>提交页：定价后保留的 SKU。</summary>
-    public IReadOnlyList<PricedSkuRow> PricedSkus => IsCollected
-        ? Products
-            .Where(p => p.Offer is not null && p.Prices is not null)
-            .SelectMany(p => p.Offer!.Skus.Zip(p.Prices!, (sku, price) => (p.Offer.Title, sku, price)))
-            .Where(x => x.price.State == SkuPriceState.Priced)
-            .Select(x => new PricedSkuRow(x.Title, string.Join(" / ", x.sku.OptionValues),
-                x.price.PurchasePrice!.Value, x.price.TheoreticalPrice!.Value, x.price.FinalPrice!.Value, x.price.ActualMargin!.Value))
-            .ToList()
-        : [];
+    /// <summary>
+    /// 提交页：按商品折叠的定价结果，只含有保留 SKU 的商品。
+    /// Refresh 很频繁，这里缓存起来，只在批次、状态或放弃数变化时重建，否则展开状态会被冲掉。
+    /// </summary>
+    public IReadOnlyList<PricedProductRow> PricedProducts
+    {
+        get
+        {
+            var key = (SelectedBatch, SelectedBatch?.State, AbandonedCount);
+            if (_pricedProducts is null || !Equals(_pricedProductsKey, key))
+            {
+                _pricedProductsKey = key;
+                _pricedProducts = BuildPricedProducts();
+            }
+
+            return _pricedProducts;
+        }
+    }
+
+    private IReadOnlyList<PricedProductRow>? _pricedProducts;
+    private object? _pricedProductsKey;
+
+    private IReadOnlyList<PricedProductRow> BuildPricedProducts()
+    {
+        if (!IsCollected)
+        {
+            return [];
+        }
+
+        var currency = SelectedBatch!.CurrencyCode;
+        return Products
+            .Where(p => !p.IsAbandoned && p.Offer is not null && p.Prices is not null)
+            .Select(p => PricedProductRow.Create(p.Offer!, p.Prices!, currency, CollapseOthers))
+            .OfType<PricedProductRow>()
+            .ToList();
+    }
+
+    /// <summary>同一时间只展开一个商品。</summary>
+    private void CollapseOthers(PricedProductRow expanded)
+    {
+        foreach (var row in _pricedProducts ?? [])
+        {
+            if (row != expanded)
+            {
+                row.IsExpanded = false;
+            }
+        }
+    }
 
     /// <summary>待处理页"价格异常"分段：每个有异常 SKU 的商品一行。</summary>
-    public IReadOnlyList<string> PriceIssues => IsCollected
+    public IReadOnlyList<PriceIssueRow> PriceIssues => IsCollected
         ? Products
-            .Where(p => p.Offer is not null && p.Prices?.Any(x => x.State == SkuPriceState.Abnormal) == true)
+            .Where(p => !p.IsAbandoned && p.Offer is not null && p.Prices?.Any(x => x.State == SkuPriceState.Abnormal) == true)
             .Select(p =>
             {
                 var abnormal = p.Prices!.Where(x => x.State == SkuPriceState.Abnormal).ToList();
-                return $"{p.Offer!.Title}：{abnormal.Count}/{p.Prices!.Count} 个 SKU 算不出价格（{abnormal[0].Reason}）";
+                return new PriceIssueRow(p, p.Offer!.Title, abnormal.Count, p.Prices!.Count, abnormal[0].Reason ?? "未知");
             })
             .ToList()
         : [];
 
     public bool HasPriceIssues => PriceIssues.Count > 0;
 
+    // 待处理页"属性"分段。匹配结果变化（人工选择、撤销、放弃、重新匹配）时 _matchVersion 加一，
+    // 分组才重建；否则 Refresh 很频繁，正在输入的筛选文字和选中项会被冲掉。
+    private int _matchVersion;
+    private IReadOnlyList<AttributeIssueGroup>? _attributeIssues;
+    private object? _attributeIssuesKey;
+
+    private BatchMatchingState? MatchingState => SelectedBatch is { } b && IsCollected ? BatchMatching.StateFor(b) : null;
+
+    /// <summary>匹配做不了的原因（类型属性没拉到、规则文件有误）。</summary>
+    public string? AttributeProblem => MatchingState?.Problem;
+
+    public bool HasAttributeProblem => AttributeProblem is not null;
+
+    public IReadOnlyList<AttributeIssueGroup> AttributeIssues
+    {
+        get
+        {
+            var key = (SelectedBatch, SelectedBatch?.State, _matchVersion);
+            if (_attributeIssues is null || !Equals(_attributeIssuesKey, key))
+            {
+                _attributeIssuesKey = key;
+                _attributeIssues = BuildAttributeIssues();
+            }
+
+            return _attributeIssues;
+        }
+    }
+
+    public bool HasAttributeIssues => AttributeIssues.Count > 0;
+
+    /// <summary>匹配做成了且没有未匹配的，显示"全部已匹配"。</summary>
+    public bool AttributesAllMatched => MatchingState is { Problem: null } && !HasAttributeIssues;
+
+    public IReadOnlyList<ManualEditRow> ManualEditRows => SelectedBatch is { } b && IsCollected
+        ? b.ManualEdits.Select(e => new ManualEditRow(e,
+            MatchingState?.Rules?.Attributes.FirstOrDefault(a => a.AttributeId == e.AttributeId)?.Name ?? e.AttributeId.ToString())).ToList()
+        : [];
+
+    public bool HasManualEdits => ManualEditRows.Count > 0;
+
+    /// <summary>人工选择、放弃只在采集完成到上架完成之间可做；已完成只读。</summary>
+    public bool CanEditAttributes => SelectedBatch?.State is BatchState.Collected or BatchState.Listing;
+
+    private IReadOnlyList<AttributeIssueGroup> BuildAttributeIssues()
+    {
+        if (MatchingState is not { Problem: null, Schema: { } schema, Rules: { } rules } state)
+        {
+            return [];
+        }
+
+        var dictionaries = schema.Dictionaries.Where(d => d.Full).ToDictionary(d => d.AttributeId, d => d.Values);
+
+        // (属性, 源值) → 含它的 SKU。只看未放弃商品里要提交的 SKU。
+        var unmatched = Products
+            .Where(p => !p.IsAbandoned && p.Offer is not null && p.AttributeMatches is not null)
+            .SelectMany(p => p.AttributeMatches!.SelectMany((sku, i) => BatchMatching.UnmatchedBlocking(sku, state)
+                .Select(m => (Product: p, Sku: p.Offer!.Skus[i], Match: m))))
+            .ToList();
+
+        return rules.Attributes
+            .Where(a => state.BlockingAttributes.Contains(a.AttributeId))
+            .Select(a =>
+            {
+                var options = Options(dictionaries.GetValueOrDefault(a.AttributeId));
+                var rows = unmatched
+                    .Where(x => x.Match.AttributeId == a.AttributeId)
+                    .GroupBy(x => x.Match.SourceValue)
+                    .OrderByDescending(g => g.Count())
+                    .Select(g => new AttributeIssueRow(a.AttributeId, g.Key, g.First().Match.Failure ?? "",
+                        g.Select(x => x.Product).Distinct().ToList(), g.Count(),
+                        g.Select(x => x.Sku.ImageUrl ?? x.Product.Offer!.MainImages.FirstOrDefault())
+                            .OfType<string>().Distinct().Take(3).ToList(),
+                        options))
+                    .ToList();
+                return new AttributeIssueGroup(a.AttributeId, a.Name, rows);
+            })
+            .Where(g => g.Rows.Count > 0)
+            .ToList();
+    }
+
+    private static IReadOnlyList<DictionaryOption> Options(IReadOnlyList<OzonDictionaryValue>? values)
+    {
+        if (values is null)
+        {
+            return [];
+        }
+
+        var duplicates = values.GroupBy(v => v.Value).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet();
+        return values
+            .Select(v => new DictionaryOption(v.Id, v.Value, duplicates.Contains(v.Value) ? $"{v.Value}（{v.Id}）" : v.Value))
+            .ToList();
+    }
+
+    /// <summary>已放弃的商品数。</summary>
+    public int AbandonedCount => IsCollected ? Products.Count(p => p.IsAbandoned) : 0;
+
+    public string AbandonedSummary => AbandonedCount > 0 ? $"已放弃 {AbandonedCount} 个商品" : "";
+
     public string PricingResultSummary => SelectedBatch is { } b && IsCollected
-        ? $"售价币种 {b.CurrencyCode}。保留 {b.SkuCount} 个 SKU，价格丢弃 {b.DroppedSkuCount} 个（明细见任务记录）。提交功能尚未实现。"
+        ? $"售价币种 {b.CurrencyCode}。保留 {b.SkuCount} 个 SKU，价格丢弃 {b.DroppedSkuCount} 个（明细见任务记录）。"
         : "";
 
     partial void OnSelectedBatchChanged(CollectionBatch? oldValue, CollectionBatch? newValue)
@@ -137,7 +274,37 @@ public sealed partial class BatchesViewModel : ObservableObject
             BatchStore.History.Insert(0, new(DateTime.Now, batch.Keyword, "中断采集，任务结束", "插件未连接，未开始"));
         }
 
+        // 采集中就落库：应用中途退出，下次启动能看到它并按中断处理
+        Collection.SaveBatch(batch);
         Refresh();
+
+        // 采集的同时把该类型的属性和字典拉到本地，匹配阶段不联网（08 号问题 6）
+        await WarmSchemaAsync(batch);
+    }
+
+    private async Task WarmSchemaAsync(CollectionBatch batch)
+    {
+        var settings = SettingsStore.LoadOzon();
+        if (!settings.IsComplete)
+        {
+            return;
+        }
+
+        try
+        {
+            await TypeSchemaCache.GetAsync(settings, batch.DescriptionCategoryId, batch.TypeId);
+
+            // 采集比拉取先结束时，匹配时还没有属性，这里补跑一次
+            if (batch.State is BatchState.Collected && BatchMatching.StateFor(batch)?.Schema is null)
+            {
+                Rematch(batch);
+            }
+        }
+        catch (OzonApiException error)
+        {
+            App.Snackbar.Show("类型属性拉取失败", $"{error.Message} 匹配前会再试。",
+                Wpf.Ui.Controls.ControlAppearance.Caution, null, TimeSpan.FromSeconds(8));
+        }
     }
 
     [RelayCommand]
@@ -158,6 +325,176 @@ public sealed partial class BatchesViewModel : ObservableObject
         }
 
         await Collection.StopAsync("用户停止");
+        Refresh();
+    }
+
+    /// <summary>开发版才有的功能（属性报告、以后的"写入规则"）。发布版构建为 Release，按钮不显示。</summary>
+    public bool IsDevBuild =>
+#if DEBUG
+        true;
+#else
+        false;
+#endif
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(AttributeReportCommand))]
+    private bool _isReporting;
+
+    private bool CanReport => IsCollected && !IsReporting;
+
+    /// <summary>开发用：重新拉该类型的属性和字典，对照本批次 1688 数据生成覆盖报告。</summary>
+    [RelayCommand(CanExecute = nameof(CanReport))]
+    private async Task AttributeReportAsync()
+    {
+        if (SelectedBatch is not { } batch)
+        {
+            return;
+        }
+
+        var settings = SettingsStore.LoadOzon();
+        if (!settings.IsComplete)
+        {
+            App.Snackbar.Show("无法生成报告", "请先在设置里填写 Ozon 凭据。",
+                Wpf.Ui.Controls.ControlAppearance.Caution, null, TimeSpan.FromSeconds(8));
+            return;
+        }
+
+        IsReporting = true;
+        try
+        {
+            // 报告用来定规则，要拿最新的属性和字典
+            var schema = await TypeSchemaCache.RefreshAsync(settings, batch.DescriptionCategoryId, batch.TypeId);
+            var products = Products;
+            var path = await Task.Run(() =>
+            {
+                // 规则每次现读，改完规则文件直接点报告就能看到效果
+                RuleSet? rules = null;
+                string? rulesError = null;
+                try
+                {
+                    rules = RuleStore.Load();
+                }
+                catch (RuleFileException error)
+                {
+                    rulesError = error.Message;
+                }
+
+                return AttributeReport.Write(batch, products, schema, rules, rulesError);
+            });
+            App.Snackbar.Show("属性报告已生成", path,
+                Wpf.Ui.Controls.ControlAppearance.Success, null, TimeSpan.FromSeconds(10));
+        }
+        catch (OzonApiException error)
+        {
+            App.Snackbar.Show("拉取属性失败", error.Message,
+                Wpf.Ui.Controls.ControlAppearance.Danger, null, TimeSpan.FromSeconds(8));
+        }
+        finally
+        {
+            IsReporting = false;
+        }
+    }
+
+    [RelayCommand]
+    private void AbandonProduct(CollectedProduct product) => Abandon([product]);
+
+    /// <summary>"属性"分段：放弃含该源值的全部商品。放弃是终态，不弹确认（19 号）。</summary>
+    [RelayCommand]
+    private void AbandonAttributeProducts(AttributeIssueRow row) => Abandon(row.Products);
+
+    private void Abandon(IReadOnlyList<CollectedProduct> products)
+    {
+        if (SelectedBatch is not { } batch || !CanEditAttributes)
+        {
+            return;
+        }
+
+        foreach (var product in products.Where(p => !p.IsAbandoned))
+        {
+            product.IsAbandoned = true;
+            BatchStore.History.Insert(0, new(DateTime.Now, batch.Keyword, "放弃商品",
+                product.Offer?.Title ?? $"商品 {product.Index}"));
+        }
+
+        BatchMatching.RecountBlocking(batch);
+        Collection.SaveBatch(batch);
+        _matchVersion++;
+        Refresh();
+    }
+
+    /// <summary>为一个源值选定字典值，本批次含该源值的 SKU 一起生效，不写规则（19 号）。</summary>
+    [RelayCommand]
+    private void ApplyAttributeValue(AttributeIssueRow row)
+    {
+        if (SelectedBatch is not { } batch || !CanEditAttributes || row.Selected is not { } option)
+        {
+            return;
+        }
+
+        batch.ManualEdits.RemoveAll(e => e.AttributeId == row.AttributeId && e.Source == row.EditSource);
+        batch.ManualEdits.Add(new ManualEdit(row.AttributeId, row.EditSource, option.Id, option.Value));
+        BatchStore.History.Insert(0, new(DateTime.Now, batch.Keyword, "人工选择属性",
+            $"属性 {row.AttributeId}：{row.SourceText} → {option.Value}（{option.Id}），{row.CountText}"));
+        Rematch(batch);
+    }
+
+    [RelayCommand]
+    private void UndoManualEdit(ManualEditRow row)
+    {
+        if (SelectedBatch is not { } batch || !CanEditAttributes)
+        {
+            return;
+        }
+
+        batch.ManualEdits.Remove(row.Edit);
+        BatchStore.History.Insert(0, new(DateTime.Now, batch.Keyword, "撤销人工选择", row.Text));
+        Rematch(batch);
+    }
+
+    /// <summary>改了规则文件后按新规则重跑（开发版常用），或拉取属性后重跑。</summary>
+    [RelayCommand]
+    private void RematchAttributes()
+    {
+        if (SelectedBatch is { } batch && CanEditAttributes)
+        {
+            Rematch(batch);
+        }
+    }
+
+    /// <summary>类型属性没拉到时，从待处理页手动拉取。</summary>
+    [RelayCommand]
+    private async Task FetchSchemaAsync()
+    {
+        if (SelectedBatch is not { } batch)
+        {
+            return;
+        }
+
+        var settings = SettingsStore.LoadOzon();
+        if (!settings.IsComplete)
+        {
+            App.Snackbar.Show("无法拉取", "请先在设置里填写 Ozon 凭据。",
+                Wpf.Ui.Controls.ControlAppearance.Caution, null, TimeSpan.FromSeconds(8));
+            return;
+        }
+
+        try
+        {
+            await TypeSchemaCache.RefreshAsync(settings, batch.DescriptionCategoryId, batch.TypeId);
+            Rematch(batch);
+        }
+        catch (OzonApiException error)
+        {
+            App.Snackbar.Show("拉取属性失败", error.Message,
+                Wpf.Ui.Controls.ControlAppearance.Danger, null, TimeSpan.FromSeconds(8));
+        }
+    }
+
+    private void Rematch(CollectionBatch batch)
+    {
+        BatchMatching.Apply(batch);
+        Collection.SaveBatch(batch);
+        _matchVersion++;
         Refresh();
     }
 
@@ -190,5 +527,6 @@ public sealed partial class BatchesViewModel : ObservableObject
     {
         OnPropertyChanged(string.Empty);
         NewBatchCommand.NotifyCanExecuteChanged();
+        AttributeReportCommand.NotifyCanExecuteChanged();
     }
 }

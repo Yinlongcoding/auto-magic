@@ -12,6 +12,8 @@
     <Page.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <conv:CountToVisibilityConverter x:Key="CountToVisibility" />
+        <conv:UrlToThumbnailConverter x:Key="UrlToThumbnail" />
     </Page.Resources>
 
     <Grid Margin="16,8,16,16">
@@ -50,6 +52,12 @@
                            Icon="{ui:SymbolIcon PanelLeftContract24}"
                            Command="{Binding ToggleBatchListCommand}"
                            ToolTip="折叠或展开批次列表" AutomationProperties.Name="折叠或展开批次列表" />
+                <!-- 开发版：属性覆盖报告，用来定规则 -->
+                <ui:Button DockPanel.Dock="Right" Content="属性报告" Appearance="Secondary"
+                           Icon="{ui:SymbolIcon DocumentTable24}" VerticalAlignment="Top"
+                           Command="{Binding AttributeReportCommand}"
+                           Visibility="{Binding IsDevBuild, Converter={StaticResource BoolToVisibility}}"
+                           ToolTip="开发用：拉取该类型的属性和字典，对照本批次数据生成报告" />
                 <StackPanel Visibility="{Binding IsBatchSelected, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock FontSize="20" FontWeight="SemiBold">
                         <Run Text="{Binding SelectedBatch.Keyword, Mode=OneWay}" />
@@ -98,41 +106,248 @@
                     </DockPanel>
                 </TabItem>
                 <TabItem Header="{Binding PendingHeader}" IsEnabled="{Binding IsCollected}">
-                    <StackPanel Margin="0,12,0,0">
-                        <TextBlock Text="价格异常" FontWeight="SemiBold" Margin="0,0,0,4" />
-                        <TextBlock Text="没有价格异常的商品。" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                   Visibility="{Binding HasPriceIssues, Converter={StaticResource InverseBoolToVisibility}}" />
-                        <ItemsControl ItemsSource="{Binding PriceIssues}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,2" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <TextBlock Margin="0,16,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"
-                                   Text="属性、物流参数、AI 失败三个分段和“放弃该商品”尚未实现。价格异常的商品目前无法处理，提交页会保持不可用。" />
-                    </StackPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,12,0,0">
+                            <!-- 已放弃商品数 -->
+                            <TextBlock Margin="0,0,0,12" FontSize="14" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Text="{Binding AbandonedSummary, Mode=OneWay}"
+                                       Visibility="{Binding AbandonedCount, Mode=OneWay, Converter={StaticResource CountToVisibility}}" />
+
+                            <!-- 属性分段：按属性分组，每个未匹配的源值一行，一个选择覆盖本批次所有含该源值的 SKU（19 号） -->
+                            <DockPanel Margin="0,0,0,8">
+                                <ui:Button DockPanel.Dock="Right" Content="按当前规则重新匹配" Appearance="Transparent"
+                                           Icon="{ui:SymbolIcon ArrowSync24}" Command="{Binding RematchAttributesCommand}"
+                                           Visibility="{Binding IsDevBuild, Converter={StaticResource BoolToVisibility}}"
+                                           ToolTip="开发用：改了 rules/ 里的文件后点这里，不用重启" />
+                                <TextBlock Text="属性" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            </DockPanel>
+
+                            <ui:InfoBar Margin="0,0,0,8" IsClosable="False" Severity="Error" Title="无法匹配属性"
+                                        IsOpen="{Binding HasAttributeProblem, Mode=OneWay}" Message="{Binding AttributeProblem, Mode=OneWay}" />
+                            <ui:Button Content="拉取类型属性" Appearance="Primary" Margin="0,0,0,8" HorizontalAlignment="Left"
+                                       Icon="{ui:SymbolIcon ArrowDownload24}" Command="{Binding FetchSchemaCommand}"
+                                       Visibility="{Binding HasAttributeProblem, Converter={StaticResource BoolToVisibility}}" />
+
+                            <TextBlock Text="所有必填和变体属性都已匹配。" Margin="0,0,0,8"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Visibility="{Binding AttributesAllMatched, Converter={StaticResource BoolToVisibility}}" />
+
+                            <ItemsControl ItemsSource="{Binding AttributeIssues}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,0,0,12">
+                                            <TextBlock Text="{Binding Header}" FontWeight="SemiBold" Margin="0,0,0,4" />
+                                            <ItemsControl ItemsSource="{Binding Rows}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <ui:Card Padding="12" Margin="0,0,0,6">
+                                                            <DockPanel>
+                                                                <!-- 右边：筛选、选值、应用、放弃 -->
+                                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                                    <StackPanel Orientation="Horizontal"
+                                                                                Visibility="{Binding CanPick, Converter={StaticResource BoolToVisibility}}">
+                                                                        <ui:TextBox Width="110" Margin="0,0,6,0" PlaceholderText="筛选"
+                                                                                    Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}"
+                                                                                    AutomationProperties.Name="筛选字典值" />
+                                                                        <ComboBox Width="170" Margin="0,0,6,0" ItemsSource="{Binding FilteredOptions}"
+                                                                                  SelectedItem="{Binding Selected}" DisplayMemberPath="Display"
+                                                                                  AutomationProperties.Name="选择字典值">
+                                                                            <ComboBox.ItemsPanel>
+                                                                                <ItemsPanelTemplate>
+                                                                                    <VirtualizingStackPanel />
+                                                                                </ItemsPanelTemplate>
+                                                                            </ComboBox.ItemsPanel>
+                                                                        </ComboBox>
+                                                                        <ui:Button Content="应用到本批次" Appearance="Primary" Margin="0,0,6,0"
+                                                                                   IsEnabled="{Binding HasSelection}"
+                                                                                   Command="{Binding DataContext.ApplyAttributeValueCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                                                   CommandParameter="{Binding}"
+                                                                                   ToolTip="本批次所有含该源值的 SKU 都用这个值，不写规则" />
+                                                                    </StackPanel>
+                                                                    <TextBlock Text="字典太大，只能写规则" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                                               Visibility="{Binding CanPick, Converter={StaticResource InverseBoolToVisibility}}" />
+                                                                    <ui:Button Content="{Binding AbandonText}" Appearance="Secondary"
+                                                                               Icon="{ui:SymbolIcon Dismiss24}"
+                                                                               Command="{Binding DataContext.AbandonAttributeProductsCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                                               CommandParameter="{Binding}"
+                                                                               ToolTip="放弃含该源值的全部商品。终态，不可撤销" />
+                                                                </StackPanel>
+
+                                                                <!-- 左边：最多 3 张缩略图，悬停放大 -->
+                                                                <ItemsControl DockPanel.Dock="Left" ItemsSource="{Binding Thumbnails}" Margin="0,0,12,0">
+                                                                    <ItemsControl.ItemsPanel>
+                                                                        <ItemsPanelTemplate>
+                                                                            <StackPanel Orientation="Horizontal" />
+                                                                        </ItemsPanelTemplate>
+                                                                    </ItemsControl.ItemsPanel>
+                                                                    <ItemsControl.ItemTemplate>
+                                                                        <DataTemplate>
+                                                                            <Border Width="40" Height="40" Margin="0,0,4,0" CornerRadius="4"
+                                                                                    Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                                                                                <Image Source="{Binding Converter={StaticResource UrlToThumbnail}, ConverterParameter=80}"
+                                                                                       Stretch="UniformToFill" AutomationProperties.Name="SKU 图" />
+                                                                                <Border.ToolTip>
+                                                                                    <Image Width="240" Height="240" Stretch="Uniform"
+                                                                                           Source="{Binding Converter={StaticResource UrlToThumbnail}, ConverterParameter=480}" />
+                                                                                </Border.ToolTip>
+                                                                            </Border>
+                                                                        </DataTemplate>
+                                                                    </ItemsControl.ItemTemplate>
+                                                                </ItemsControl>
+
+                                                                <StackPanel VerticalAlignment="Center">
+                                                                    <TextBlock Text="{Binding SourceText}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                                                               ToolTip="{Binding SourceText}" />
+                                                                    <TextBlock Margin="0,2,0,0" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                                               TextTrimming="CharacterEllipsis">
+                                                                        <Run Text="{Binding CountText, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding Failure, Mode=OneWay}" />
+                                                                    </TextBlock>
+                                                                </StackPanel>
+                                                            </DockPanel>
+                                                        </ui:Card>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- 本批次已做的人工选择，可撤销 -->
+                            <StackPanel Margin="0,0,0,16" Visibility="{Binding HasManualEdits, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="本批次的人工选择" FontWeight="SemiBold" Margin="0,4,0,4" />
+                                <ItemsControl ItemsSource="{Binding ManualEditRows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <DockPanel Margin="0,2">
+                                                <ui:Button DockPanel.Dock="Right" Content="撤销" Appearance="Transparent"
+                                                           Command="{Binding DataContext.UndoManualEditCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                           CommandParameter="{Binding}" />
+                                                <TextBlock Text="{Binding Text}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <!-- 价格异常分段 -->
+                            <TextBlock Text="价格异常" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <TextBlock Text="没有价格异常的商品。"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,8"
+                                       Visibility="{Binding HasPriceIssues, Converter={StaticResource InverseBoolToVisibility}}" />
+
+                            <ItemsControl ItemsSource="{Binding PriceIssues}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <ui:Card Padding="12" Margin="0,0,0,8">
+                                            <DockPanel>
+                                                <ui:Button DockPanel.Dock="Right" Content="放弃该商品" Appearance="Secondary"
+                                                           Icon="{ui:SymbolIcon Dismiss24}"
+                                                           Command="{Binding DataContext.AbandonProductCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                           CommandParameter="{Binding Product}"
+                                                           ToolTip="终态，不可撤销" />
+                                                <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                            </DockPanel>
+                                        </ui:Card>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- 未实现的分段提示 -->
+                            <Border Padding="12" Margin="0,16,0,0" Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4">
+                                <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextWrapping="Wrap">
+                                    <Run FontWeight="SemiBold">其他分段：</Run>
+                                    <Run Text="物流参数填写、AI 失败处理尚未实现。" />
+                                </TextBlock>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
                 </TabItem>
                 <TabItem Header="{Binding CopyHeader}" IsEnabled="{Binding IsCollected}">
                     <TextBlock Margin="16" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                Text="文案：缩略图、中文原标题、俄文标题，需点“本批文案已审阅”（待实现）" />
                 </TabItem>
                 <TabItem Header="{Binding SubmitHeader}" IsEnabled="{Binding CanSubmit}">
-                    <DockPanel Margin="0,12,0,0">
+                    <DockPanel Margin="12">
+                        <!-- 顶部摘要 -->
                         <TextBlock DockPanel.Dock="Top" Text="{Binding PricingResultSummary}" Margin="0,0,0,8"
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                        <DataGrid ItemsSource="{Binding PricedSkus}" AutoGenerateColumns="False" IsReadOnly="True"
-                                  HeadersVisibility="Column" CanUserAddRows="False" AutomationProperties.Name="定价结果">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="商品" Binding="{Binding Title}" Width="*" />
-                                <DataGridTextColumn Header="规格" Binding="{Binding Spec}" Width="160" />
-                                <DataGridTextColumn Header="采购价 ¥" Binding="{Binding PurchasePrice, StringFormat={}{0:0.00}}" Width="90" />
-                                <DataGridTextColumn Header="理论售价" Binding="{Binding TheoreticalPrice, StringFormat={}{0:0}}" Width="90" />
-                                <DataGridTextColumn Header="最终售价" Binding="{Binding FinalPrice, StringFormat={}{0:0}}" Width="90" />
-                                <DataGridTextColumn Header="实际利润率" Binding="{Binding ActualMargin, StringFormat={}{0:P1}}" Width="90" />
-                                <DataGridTextColumn Header="" Binding="{Binding ClampNote}" Width="80" />
-                            </DataGrid.Columns>
-                        </DataGrid>
+
+                        <!-- 按商品折叠，点开看 SKU，同一时间只展开一个。商品多时靠虚拟化保持流畅 -->
+                        <ItemsControl ItemsSource="{Binding PricedProducts}" AutomationProperties.Name="定价结果"
+                                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                                      VirtualizingPanel.ScrollUnit="Pixel" ScrollViewer.CanContentScroll="True">
+                            <ItemsControl.Template>
+                                <ControlTemplate TargetType="ItemsControl">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+                                        <ItemsPresenter />
+                                    </ScrollViewer>
+                                </ControlTemplate>
+                            </ItemsControl.Template>
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Expander Margin="0,0,8,4" IsExpanded="{Binding IsExpanded}"
+                                              AutomationProperties.Name="{Binding Title}">
+                                        <Expander.Header>
+                                            <DockPanel>
+                                                <Border DockPanel.Dock="Left" Width="48" Height="48" Margin="0,0,12,0" CornerRadius="4"
+                                                        Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                                                    <Image Source="{Binding ThumbnailUrl, Converter={StaticResource UrlToThumbnail}, ConverterParameter=96}"
+                                                           Stretch="UniformToFill" AutomationProperties.Name="商品主图" />
+                                                </Border>
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Summary}" Margin="0,2,0,0" FontSize="12"
+                                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                    <TextBlock Text="{Binding PriceText}" Margin="0,2,0,0" FontSize="12" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Expander.Header>
+
+                                        <!-- 展开内容：一个颜色一行，尺码横排。价格与标题行不同时才在行尾写出 -->
+                                        <ItemsControl ItemsSource="{Binding Groups}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <DockPanel Margin="0,2">
+                                                        <Border DockPanel.Dock="Left" Width="32" Height="32" Margin="0,0,8,0" CornerRadius="4"
+                                                                Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                                                            <Image Source="{Binding ImageUrl, Converter={StaticResource UrlToThumbnail}, ConverterParameter=64}"
+                                                                   Stretch="UniformToFill" AutomationProperties.Name="规格图" />
+                                                        </Border>
+                                                        <TextBlock DockPanel.Dock="Left" Width="160" Text="{Binding Name}" VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding PriceText}" Margin="12,0,0,0"
+                                                                   VerticalAlignment="Center" FontSize="12" />
+                                                        <ItemsControl ItemsSource="{Binding Options}" VerticalAlignment="Center">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <WrapPanel />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Border Margin="0,1,4,1" Padding="6,1" CornerRadius="4"
+                                                                            Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                                                                        <TextBlock Text="{Binding}" FontSize="12" />
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </DockPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Expander>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </DockPanel>
                 </TabItem>
             </TabControl>

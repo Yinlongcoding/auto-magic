@@ -49,9 +49,9 @@ public static class BatchPricing
             }
         }
 
+        // 阻断数由 BatchMatching 合并价格和属性一起算，这里不写
         batch.SkuCount = priced;
         batch.DroppedSkuCount = dropped;
-        batch.BlockingCount = blockingProducts;
 
         var detail = $"保留 {priced} 个 SKU，丢弃 {dropped} 个";
         if (allDroppedProducts > 0)

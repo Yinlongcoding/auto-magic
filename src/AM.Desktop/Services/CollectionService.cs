@@ -117,10 +117,12 @@ public sealed partial class CollectionService : ObservableObject
                 BatchStore.History.Insert(0, new(DateTime.Now, batch.Keyword, "采集完成",
                     $"成功 {f.Succeeded}，失败 {f.Failed}"));
 
-                // 定价在切换状态之前做，页签刷新时价格和阻断数已就绪
+                // 定价和属性匹配在切换状态之前做，页签刷新时价格和阻断数已就绪。匹配只看要提交的 SKU，所以排在定价后面。
                 BatchPricing.Apply(batch);
+                LogMatching(batch, BatchMatching.Apply(batch));
                 batch.State = BatchState.Collected;
                 DumpBatch(batch);
+                SaveBatch(batch);
                 Active = null;
                 break;
 
@@ -224,6 +226,25 @@ public sealed partial class CollectionService : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 保存批次到数据库。
+    /// </summary>
+    /// <summary>
+    /// 批次连同商品写库。批次状态或商品变化后调用。
+    /// 须在 UI 线程上发起：序列化要读界面集合；写库是异步的，不阻塞界面。
+    /// </summary>
+    public async void SaveBatch(CollectionBatch batch)
+    {
+        try
+        {
+            await App.BatchRepo.SaveAsync(batch);
+        }
+        catch (Exception error)
+        {
+            FileSaveFailed?.Invoke("批次数据库保存失败", error.Message);
+        }
+    }
+
     private void OnDisconnected()
     {
         IsPluginConnected = false;
@@ -232,6 +253,13 @@ public sealed partial class CollectionService : ObservableObject
         {
             Interrupt(batch, "插件断开");
         }
+    }
+
+    private static void LogMatching(CollectionBatch batch, int unmatchedProducts)
+    {
+        var detail = BatchMatching.StateFor(batch)?.Problem
+            ?? (unmatchedProducts > 0 ? $"{unmatchedProducts} 个商品有属性未匹配，见待处理页" : "全部属性已匹配");
+        BatchStore.History.Insert(0, new(DateTime.Now, batch.Keyword, "属性匹配", detail));
     }
 
     /// <summary>中断是终态：批次标为已中断，暂存数据全部丢弃。</summary>
@@ -243,6 +271,7 @@ public sealed partial class CollectionService : ObservableObject
         batch.State = BatchState.Interrupted;
         BatchStore.History.Insert(0, new(DateTime.Now, batch.Keyword, "中断采集，任务结束",
             $"{reason}，已采集 {collected} 个，全部丢弃"));
+        SaveBatch(batch);
         if (ReferenceEquals(Active, batch))
         {
             Active = null;

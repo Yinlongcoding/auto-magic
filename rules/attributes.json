@@ -1,0 +1,7 @@
+[
+  { "attributeId": 10096, "name": "商品颜色", "sources": ["规格:颜色"], "prefixMatch": true },
+  { "attributeId": 4295, "name": "俄罗斯尺码", "sources": ["规格:尺码"] },
+  { "attributeId": 31, "name": "服装和鞋类品牌", "sources": [] },
+  { "attributeId": 9163, "name": "性别", "sources": [] },
+  { "attributeId": 8229, "name": "类型", "sources": [] }
+]

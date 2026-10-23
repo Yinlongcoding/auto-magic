@@ -61,6 +61,12 @@ public sealed partial class CollectionBatch : ObservableObject
     [ObservableProperty]
     private int _droppedSkuCount;
 
+    /// <summary>
+    /// 待处理页"属性"分段里为源值选定的结果，只对本批次生效（18 号"同一任务内复用"）。
+    /// 按（属性、源值）存一份，不按商品各存一份，这样同批次里含该源值的商品都自动套用，以后补抓的也一样。
+    /// </summary>
+    public List<AM.Core.Rules.ManualEdit> ManualEdits { get; init; } = [];
+
     public int AbandonedCount { get; init; }
     public int CopyFailedCount { get; init; }
     public int SubmittedCount { get; init; }
