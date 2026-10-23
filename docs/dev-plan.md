@@ -11,9 +11,14 @@
 
 ## 仓库现状
 
-- 位置 D:/ys-project/AM，已 git init，尚无提交。
-- 解决方案 AM.slnx，一个 WPF 项目 src/AM.Desktop（net10.0-windows，SDK 10.0.400，global.json 已设），引用 CommunityToolkit.Mvvm 8.4.2。
-- 项目还没有构建过。模板生成的 MainWindow 是空的。
+- 位置 D:/ys-project/AM，独立 git 仓库，没有远程，只在本机。设计目录 D:/ys-project/auto-magic-design 不是 git 仓库。
+- 解决方案 AM.slnx：
+  - src/AM.Desktop：WPF 界面（net10.0-windows，WPF-UI、CommunityToolkit.Mvvm）。
+  - src/AM.Core：定价等纯逻辑。tests/AM.Core.Tests：xUnit。
+  - src/AM.Bridge：插件协议。src/AM.NativeHost：Chrome native messaging 中转。
+  - plugin/：Chrome 插件（加载已解压的扩展程序）。scripts/：NativeHost 注册。
+- 启动：`dotnet run --project D:\ys-project\AM\src\AM.Desktop`。AM 运行时占用 bin 下的文件，构建会失败；验证可以输出到临时目录（`-o`）。
+- 本机数据在 %LocalAppData%\AM\：settings.json（Ozon 凭据，DPAPI 加密）、category-tree.json、probes\、batches\、native-host.log。都不进仓库。
 - 旧仓库 D:/ys-project/auto-magic 只作参考。用户不喜欢旧界面，不要复制或模仿它。
 
 ## 里程碑
@@ -48,7 +53,7 @@
 - 分两步：
   1. 通信骨架（已完成，2026-10-21 用户在真实 Chrome 和桌面端联调通过）：plugin/ 只有 fake-collector.js 产出假商品，验证两遍抓取、健康检查跳过第 2 遍、停止。注册用 scripts/register-native-host.ps1。
   2. 页面探测（已完成，2026-10-22）：plugin/probe.js 只在用户点插件按钮时读取当前页，结果经 probe.result 存到 %LocalAppData%\AM\probes\。结论写入设计目录 16 号"实测结果"一节；采购价口径（原价第一档）写入 13 号第 6 项。接完真实采集后 probe.js、popup、probe.result 一起删除。
-  3. 真实采集（代码完成，2026-10-22，尚未在真实 1688 上运行）：plugin/collector.js（流程）和 page-readers.js（页面读取）替换了 fake-collector.js。拼搜索 URL、跳过广告卡片、详情页读 window.context，CollectItemPayload 带 CollectedOffer。详情图只存 detailUrl，不抓图片（用户已同意）。价格排序因 URL 参数未实测，暂从界面移除。首次真实运行已完成（2026-10-22，5/5 成功，结果见设计目录 16 号）。批次数据写到 %LocalAppData%\AM\batches\（开发用，M2 后删除）。
+  3. 真实采集（已完成，2026-10-22）：plugin/collector.js（流程）和 page-readers.js（页面读取）替换了 fake-collector.js。拼搜索 URL、跳过广告卡片、详情页读 window.context，CollectItemPayload 带 CollectedOffer。详情图只存 detailUrl，不抓图片（用户已同意）。价格排序因 URL 参数未实测，暂从界面移除。首次真实运行已完成（2026-10-22，5/5 成功，结果见设计目录 16 号）。批次数据写到 %LocalAppData%\AM\batches\（开发用，M2 后删除）。
 - 采集规则：每商品最多抓两遍；第一遍结束后做一次健康检查，超阈值则跳过第二遍；数据在采集结束后一次性返回（16 号、19 号）。
 
 ### M4 验证采集
@@ -63,20 +68,31 @@
 
 结果写回设计文档。
 
-### 定价（2026-10-22，代码完成，尚未用真实批次跑过）
+### 定价（已完成，2026-10-23 用户用真实批次确认）
 
 - 公式和保护条件在 src/AM.Core/Pricing（PricingEngine、PricingParameters），tests/AM.Core.Tests 覆盖。规则见设计目录 13 号（方案 A）。
 - 新建采集填定价参数并冻结；搜索按采购价上限（priceEnd）和选填的采购价下限（priceStart）粗筛；采集完成后逐 SKU 定价（Desktop/Services/BatchPricing），低于采购价下限的 SKU 丢弃。
 - 结果：提交页显示保留 SKU 的价格列；价格丢弃写任务记录；价格异常显示在待处理页并阻断提交页。
+- 采购价下限（选填，2026-10-23 用户要求）：用户实测不设下限时低价货质量差。
 - 未做：待处理页"放弃该商品"，所以有价格异常的批次目前无法进入提交页。
+
+## 下一步候选（顺序由用户定，新会话先问用户）
+
+- 待处理页"放弃该商品"：解除价格异常对提交页的阻断。
+- M2 数据层（SQLite）：现在批次、商品、任务记录只在内存里，关闭 AM 就丢失。
+- 设置页"采集"一组：抓取间隔（现为占位 1.5 秒）、健康检查失败率阈值（现为占位 0.3）。
+- 字典与匹配引擎、规则（18 号）。
+- AI 文案和图片（12 号）、OSS（服务商未定）。
+- 提交与状态轮询（10、11 号）。
+
+已完成的：Ozon 设置与类目树缓存、真实采集、定价。
 
 ## 之后的模块（顺序未定）
 
-字典与类目树缓存、匹配引擎与规则、AI 文案和图片、OSS、定价、提交与状态轮询。提交模块的第一次真实调用要先验证 11 号清单第 1 项（相同 offer_id 重提是否为更新），而且会向用户的真实卖家后台发请求，动手前必须取得用户明确同意。
+字典、匹配引擎与规则、AI 文案和图片、OSS、提交与状态轮询。提交模块的第一次真实调用要先验证 11 号清单第 1 项（相同 offer_id 重提是否为更新），而且会向用户的真实卖家后台发请求，动手前必须取得用户明确同意。
 
 ## 未决事项
 
-- 界面风格（M1 前必问）。
 - OSS 服务商和字段（用户后续补充）。
 - 汇率偏差阈值 3% 只是占位。
 - 旧 AGENTS.md 的"规则变更必须单独汇报"是否沿用，未定。AM 的 AGENTS.md 暂未带入。
