@@ -5,11 +5,13 @@
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:vm="clr-namespace:AM.Desktop.ViewModels"
+      xmlns:conv="clr-namespace:AM.Desktop.Views"
       mc:Ignorable="d"
       d:DataContext="{d:DesignInstance Type=vm:BatchesViewModel}"
       Title="采集上架">
     <Page.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
     </Page.Resources>
 
     <Grid Margin="16,8,16,16">
@@ -96,16 +98,42 @@
                     </DockPanel>
                 </TabItem>
                 <TabItem Header="{Binding PendingHeader}" IsEnabled="{Binding IsCollected}">
-                    <TextBlock Margin="16" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                               Text="待处理：属性、物流参数、价格异常、AI 失败四个分段（待实现）" />
+                    <StackPanel Margin="0,12,0,0">
+                        <TextBlock Text="价格异常" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <TextBlock Text="没有价格异常的商品。" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Visibility="{Binding HasPriceIssues, Converter={StaticResource InverseBoolToVisibility}}" />
+                        <ItemsControl ItemsSource="{Binding PriceIssues}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,2" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Margin="0,16,0,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"
+                                   Text="属性、物流参数、AI 失败三个分段和“放弃该商品”尚未实现。价格异常的商品目前无法处理，提交页会保持不可用。" />
+                    </StackPanel>
                 </TabItem>
                 <TabItem Header="{Binding CopyHeader}" IsEnabled="{Binding IsCollected}">
                     <TextBlock Margin="16" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                Text="文案：缩略图、中文原标题、俄文标题，需点“本批文案已审阅”（待实现）" />
                 </TabItem>
                 <TabItem Header="{Binding SubmitHeader}" IsEnabled="{Binding CanSubmit}">
-                    <TextBlock Margin="16" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                               Text="提交：SKU 列表、价格列、提交所选和确认弹窗（待实现）" />
+                    <DockPanel Margin="0,12,0,0">
+                        <TextBlock DockPanel.Dock="Top" Text="{Binding PricingResultSummary}" Margin="0,0,0,8"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                        <DataGrid ItemsSource="{Binding PricedSkus}" AutoGenerateColumns="False" IsReadOnly="True"
+                                  HeadersVisibility="Column" CanUserAddRows="False" AutomationProperties.Name="定价结果">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="商品" Binding="{Binding Title}" Width="*" />
+                                <DataGridTextColumn Header="规格" Binding="{Binding Spec}" Width="160" />
+                                <DataGridTextColumn Header="采购价 ¥" Binding="{Binding PurchasePrice, StringFormat={}{0:0.00}}" Width="90" />
+                                <DataGridTextColumn Header="理论售价" Binding="{Binding TheoreticalPrice, StringFormat={}{0:0}}" Width="90" />
+                                <DataGridTextColumn Header="最终售价" Binding="{Binding FinalPrice, StringFormat={}{0:0}}" Width="90" />
+                                <DataGridTextColumn Header="实际利润率" Binding="{Binding ActualMargin, StringFormat={}{0:P1}}" Width="90" />
+                                <DataGridTextColumn Header="" Binding="{Binding ClampNote}" Width="80" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
                 </TabItem>
             </TabControl>
         </DockPanel>

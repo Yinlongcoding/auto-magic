@@ -7,8 +7,8 @@
         xmlns:vm="clr-namespace:AM.Desktop.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:NewBatchViewModel}"
-        Title="新建采集" Width="720" SizeToContent="Height" MaxHeight="760"
-        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" ResizeMode="NoResize"
+        Title="新建采集" Width="1000" Height="636" MinWidth="800" MinHeight="480"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" ResizeMode="CanResize"
         ExtendsContentIntoTitleBar="True" WindowBackdropType="Mica" WindowCornerPreference="Round">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
@@ -98,10 +98,10 @@
                     <ComboBox Grid.Row="2" Grid.Column="1" Margin="0,0,0,12" ItemsSource="{Binding SortOptions}"
                               SelectedItem="{Binding SelectedSort}" AutomationProperties.Name="排序方式" />
                 </Grid>
-                <TextBlock Text="定价参数" FontWeight="SemiBold" Margin="0,8,0,4" />
-                <TextBlock Text="定价尚未实现：这些参数暂不保存、不参与采集，采集时不按价格筛选。" Margin="0,0,0,12"
-                           TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                <Grid IsEnabled="False">
+                <TextBlock Text="定价参数（开始采集后冻结，之后不能改）" FontWeight="SemiBold" Margin="0,8,0,4" />
+                <TextBlock Margin="0,0,0,12" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="售价 = (采购价 + 物流成本) ÷ (1 − 佣金率 − 目标利润率) × 汇率，向上取整后夹到售价区间。夹到上限后利润率低于最低利润率的 SKU 丢弃；设了采购价下限时，低于下限的 SKU 也丢弃。" />
+                <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" SharedSizeGroup="FieldLabel" />
                         <ColumnDefinition Width="*" />
@@ -113,46 +113,61 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <TextBlock Text="佣金率 %" Style="{StaticResource FieldLabel}" />
-                    <ui:NumberBox Grid.Column="1" Margin="0,0,0,12" AutomationProperties.Name="佣金率" />
+                    <ui:NumberBox Grid.Column="1" Margin="0,0,0,12" Minimum="0" Maximum="99" AutomationProperties.Name="佣金率"
+                                  Value="{Binding CommissionPercent, Mode=TwoWay}" />
                     <TextBlock Grid.Column="3" Text="物流成本 ¥" Style="{StaticResource FieldLabel}" />
-                    <ui:NumberBox Grid.Column="4" Margin="0,0,0,12" AutomationProperties.Name="物流成本" />
+                    <ui:NumberBox Grid.Column="4" Margin="0,0,0,12" Minimum="0" AutomationProperties.Name="物流成本"
+                                  Value="{Binding LogisticsCost, Mode=TwoWay}" />
                     <TextBlock Grid.Row="1" Text="目标利润 %" Style="{StaticResource FieldLabel}" />
-                    <ui:NumberBox Grid.Row="1" Grid.Column="1" Margin="0,0,0,12" AutomationProperties.Name="目标利润率" />
-                    <TextBlock Grid.Row="1" Grid.Column="3" Text="汇率 / 浮动%" Style="{StaticResource FieldLabel}" />
-                    <Grid Grid.Row="1" Grid.Column="4" Margin="0,0,0,12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="8" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <ui:NumberBox AutomationProperties.Name="汇率" />
-                        <ui:NumberBox Grid.Column="2" AutomationProperties.Name="汇率浮动百分比" />
-                    </Grid>
-                    <TextBlock Grid.Row="2" Text="利润率区间 %" Style="{StaticResource FieldLabel}" />
+                    <ui:NumberBox Grid.Row="1" Grid.Column="1" Margin="0,0,0,12" Minimum="0" Maximum="99" AutomationProperties.Name="目标利润率"
+                                  Value="{Binding TargetMarginPercent, Mode=TwoWay}" />
+                    <TextBlock Grid.Row="1" Grid.Column="3" Text="最低利润 %" Style="{StaticResource FieldLabel}" />
+                    <ui:NumberBox Grid.Row="1" Grid.Column="4" Margin="0,0,0,12" Minimum="0" Maximum="99" AutomationProperties.Name="最低利润率"
+                                  Value="{Binding MinMarginPercent, Mode=TwoWay}" />
+                    <TextBlock Grid.Row="2" Text="{Binding SalePriceLabel}" Style="{StaticResource FieldLabel}" />
                     <Grid Grid.Row="2" Grid.Column="1" Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <ui:NumberBox AutomationProperties.Name="利润率下限" />
+                        <ui:NumberBox Minimum="0" AutomationProperties.Name="售价下限" Value="{Binding SalePriceMin, Mode=TwoWay}" />
                         <TextBlock Grid.Column="1" Text="到" VerticalAlignment="Center" Margin="8,0" />
-                        <ui:NumberBox Grid.Column="2" AutomationProperties.Name="利润率上限" />
+                        <ui:NumberBox Grid.Column="2" Minimum="0" AutomationProperties.Name="售价上限" Value="{Binding SalePriceMax, Mode=TwoWay}" />
                     </Grid>
-                    <TextBlock Grid.Row="2" Grid.Column="3" Text="售价区间 ₽" Style="{StaticResource FieldLabel}" />
+                    <TextBlock Grid.Row="2" Grid.Column="3" Text="{Binding ExchangeRateLabel}" Style="{StaticResource FieldLabel}" />
                     <Grid Grid.Row="2" Grid.Column="4" Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="8" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <ui:NumberBox AutomationProperties.Name="售价下限" />
-                        <TextBlock Grid.Column="1" Text="到" VerticalAlignment="Center" Margin="8,0" />
-                        <ui:NumberBox Grid.Column="2" AutomationProperties.Name="售价上限" />
+                        <ui:NumberBox Minimum="0" AutomationProperties.Name="汇率" Value="{Binding ExchangeRate, Mode=TwoWay}" />
+                        <ui:NumberBox Grid.Column="2" Minimum="0" Maximum="99" AutomationProperties.Name="汇率浮动百分比"
+                                      Value="{Binding ExchangeFloatPercent, Mode=TwoWay}" />
                     </Grid>
+                    <TextBlock Grid.Row="3" Text="采购价下限 ¥" Style="{StaticResource FieldLabel}" />
+                    <ui:NumberBox Grid.Row="3" Grid.Column="1" Margin="0,0,0,12" Minimum="0" AutomationProperties.Name="采购价下限"
+                                  PlaceholderText="选填，留空不设下限" Value="{Binding PurchasePriceMin, Mode=TwoWay}" />
+                    <TextBlock Grid.Row="3" Grid.Column="3" Grid.ColumnSpan="2" VerticalAlignment="Center" Margin="0,0,0,12"
+                               TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="排除低价货：搜索时过滤，低于它的 SKU 丢弃。" />
                 </Grid>
+                <TextBlock Text="{Binding PricingPreview}" TextWrapping="Wrap" Margin="0,0,0,8">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding PricingPreviewIsError}" Value="True">
+                                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </StackPanel>
         </ScrollViewer>
     </DockPanel>

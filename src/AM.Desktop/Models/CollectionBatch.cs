@@ -1,3 +1,4 @@
+using AM.Core.Pricing;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace AM.Desktop.Models;
@@ -15,7 +16,18 @@ public sealed partial class CollectionBatch : ObservableObject
     public long DescriptionCategoryId { get; init; }
     public long TypeId { get; init; }
     public required DateTime CreatedAt { get; init; }
-    public required string PricingSummary { get; init; }
+
+    /// <summary>新建时填写的定价参数，随批次冻结，采集到上架不变。</summary>
+    public required PricingParameters Pricing { get; init; }
+
+    /// <summary>售价币种，新建时取自设置里的 currency_code，随批次冻结。</summary>
+    public required string CurrencyCode { get; init; }
+
+    public string PricingSummary =>
+        $"佣金 {Pricing.CommissionRate:P0} · 物流 ¥{Pricing.LogisticsCost:0.##} · 目标利润 {Pricing.TargetMargin:P0} · " +
+        $"最低利润 {Pricing.MinMargin:P0} · 售价 {Pricing.SalePriceMin:0.##}～{Pricing.SalePriceMax:0.##} {CurrencyCode} · " +
+        $"汇率 {Pricing.ExchangeRate:0.####}（浮动 {Pricing.ExchangeFloat:P0}）" +
+        (Pricing.PurchasePriceMin is { } min ? $" · 采购价 ≥ ¥{min:0.##}" : "");
 
     public int TargetCount { get; init; }
 
@@ -38,9 +50,17 @@ public sealed partial class CollectionBatch : ObservableObject
     [ObservableProperty]
     private string? _warning;
 
-    // 上架
-    public int SkuCount { get; init; }
-    public int BlockingCount { get; init; }
+    // 上架。SkuCount 是定价后保留的 SKU 数，BlockingCount 是有阻断项的商品数（目前只有价格异常）。
+    [ObservableProperty]
+    private int _skuCount;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ListText))]
+    private int _blockingCount;
+
+    [ObservableProperty]
+    private int _droppedSkuCount;
+
     public int AbandonedCount { get; init; }
     public int CopyFailedCount { get; init; }
     public int SubmittedCount { get; init; }

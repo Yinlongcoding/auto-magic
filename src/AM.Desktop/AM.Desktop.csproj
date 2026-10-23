@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AM.Bridge\AM.Bridge.csproj" />
+    <ProjectReference Include="..\AM.Core\AM.Core.csproj" />
   </ItemGroup>
 
 </Project>

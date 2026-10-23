@@ -8,7 +8,7 @@ namespace AM.Desktop.Services;
 /// 桌面端命名管道服务。NativeHost 连进来就代表插件已连接；同一时间只接受一个连接。
 /// 事件在后台线程触发，订阅方自己切回界面线程。
 /// </summary>
-public sealed class BridgeServer : IAsyncDisposable
+public sealed class BridgeServer
 {
     private readonly CancellationTokenSource _shutdown = new();
     private readonly SemaphoreSlim _writeLock = new(1, 1);
@@ -121,15 +121,25 @@ public sealed class BridgeServer : IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>
+    /// 退出时调用：取消管道循环，最多等 timeout。管道关闭后 NativeHost 读到流结束会自己退出。
+    /// 必须同步等待：在界面线程上 await 会把后续排回界面线程，而界面线程正阻塞在退出流程里，两边互等，进程关不掉。
+    /// 管道循环在线程池上运行，同步 Wait 不会死锁；超时也照常退出，不让进程挂住。
+    /// </summary>
+    public void Shutdown(TimeSpan timeout)
     {
         _shutdown.Cancel();
-        if (_loop is not null)
+        try
         {
-            await _loop;
+            if (_loop is null || _loop.Wait(timeout))
+            {
+                _shutdown.Dispose();
+                _writeLock.Dispose();
+            }
         }
-
-        _shutdown.Dispose();
-        _writeLock.Dispose();
+        catch (AggregateException)
+        {
+            // 循环以异常结束也不影响退出
+        }
     }
 }

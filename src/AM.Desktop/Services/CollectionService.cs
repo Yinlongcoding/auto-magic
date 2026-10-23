@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using AM.Bridge;
+using AM.Core.Pricing;
 using AM.Desktop.Models;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -10,7 +11,7 @@ namespace AM.Desktop.Services;
 /// 采集服务：通过 BridgeServer 和插件通信，管理当前唯一的采集批次。
 /// 商品逐条写入内存暂存；两遍结束才算采集完成；停止、断连、关闭即中断，暂存全部丢弃。
 /// </summary>
-public sealed partial class CollectionService : ObservableObject, IAsyncDisposable
+public sealed partial class CollectionService : ObservableObject
 {
     // 抓取间隔和健康检查阈值应来自设置，设置页还没有这两项。数值是占位，没有依据。
     private const int IntervalMs = 1500;
@@ -45,9 +46,13 @@ public sealed partial class CollectionService : ObservableObject, IAsyncDisposab
         }
 
         Active = batch;
+
+        // 搜索页粗筛：上限由公式反推；下限是选填的采购价下限，未设时不限
         var sent = await _bridge.SendAsync(BridgeEnvelope.Create(BridgeProtocol.Types.CollectStart,
             new CollectStartPayload(batch.Id, batch.Keyword, batch.TargetCount, ToProtocolSort(batch.Sort),
-                PurchasePriceMin: null, PurchasePriceMax: null, IntervalMs, HealthFailureRate)));
+                PurchasePriceMin: PricingEngine.SearchPriceFloor(batch.Pricing),
+                PurchasePriceMax: PricingEngine.SearchPriceCeiling(batch.Pricing),
+                IntervalMs, HealthFailureRate)));
         if (!sent)
         {
             Interrupt(batch, "插件未响应");
@@ -109,9 +114,12 @@ public sealed partial class CollectionService : ObservableObject, IAsyncDisposab
 
             case BridgeProtocol.Types.CollectFinished when envelope.PayloadAs<CollectFinishedPayload>() is { } f:
                 batch.CollectedCount = f.Succeeded;
-                batch.State = BatchState.Collected;
                 BatchStore.History.Insert(0, new(DateTime.Now, batch.Keyword, "采集完成",
                     $"成功 {f.Succeeded}，失败 {f.Failed}"));
+
+                // 定价在切换状态之前做，页签刷新时价格和阻断数已就绪
+                BatchPricing.Apply(batch);
+                batch.State = BatchState.Collected;
                 DumpBatch(batch);
                 Active = null;
                 break;
@@ -195,13 +203,19 @@ public sealed partial class CollectionService : ObservableObject, IAsyncDisposab
                 batch.Keyword,
                 batch.CategoryPath,
                 batch.TypeId,
-                Products = BatchStore.ProductsFor(batch).Select(p => new { p.Index, p.Status, p.Offer }),
+                batch.CurrencyCode,
+                batch.Pricing,
+                SearchPriceFloor = PricingEngine.SearchPriceFloor(batch.Pricing),
+                SearchPriceCeiling = PricingEngine.SearchPriceCeiling(batch.Pricing),
+                Products = BatchStore.ProductsFor(batch).Select(p => new { p.Index, p.Status, p.Offer, p.Prices }),
             };
-            File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(dump, new System.Text.Json.JsonSerializerOptions(BridgeJson.Options)
+            var options = new System.Text.Json.JsonSerializerOptions(BridgeJson.Options)
             {
                 WriteIndented = true,
                 Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-            }));
+            };
+            options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+            File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(dump, options));
             FileSaved?.Invoke("批次数据已保存", path);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
@@ -243,5 +257,6 @@ public sealed partial class CollectionService : ObservableObject, IAsyncDisposab
 
     private static void OnUi(Action action) => Application.Current?.Dispatcher.BeginInvoke(action);
 
-    public ValueTask DisposeAsync() => _bridge.DisposeAsync();
+    /// <summary>应用退出时关闭管道。进行中的采集随插件断连按中断处理，暂存数据丢弃。</summary>
+    public void Shutdown() => _bridge.Shutdown(TimeSpan.FromSeconds(2));
 }

@@ -28,7 +28,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        Collection.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        Collection.Shutdown();
         base.OnExit(e);
     }
 }

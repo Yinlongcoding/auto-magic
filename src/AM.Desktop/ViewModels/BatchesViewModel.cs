@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using AM.Core.Pricing;
 using AM.Desktop.Models;
 using AM.Desktop.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -77,6 +78,35 @@ public sealed partial class BatchesViewModel : ObservableObject
         { State: BatchState.Interrupted } => [],
         { } b => BatchStore.ProductsFor(b),
     };
+
+    /// <summary>提交页：定价后保留的 SKU。</summary>
+    public IReadOnlyList<PricedSkuRow> PricedSkus => IsCollected
+        ? Products
+            .Where(p => p.Offer is not null && p.Prices is not null)
+            .SelectMany(p => p.Offer!.Skus.Zip(p.Prices!, (sku, price) => (p.Offer.Title, sku, price)))
+            .Where(x => x.price.State == SkuPriceState.Priced)
+            .Select(x => new PricedSkuRow(x.Title, string.Join(" / ", x.sku.OptionValues),
+                x.price.PurchasePrice!.Value, x.price.TheoreticalPrice!.Value, x.price.FinalPrice!.Value, x.price.ActualMargin!.Value))
+            .ToList()
+        : [];
+
+    /// <summary>待处理页"价格异常"分段：每个有异常 SKU 的商品一行。</summary>
+    public IReadOnlyList<string> PriceIssues => IsCollected
+        ? Products
+            .Where(p => p.Offer is not null && p.Prices?.Any(x => x.State == SkuPriceState.Abnormal) == true)
+            .Select(p =>
+            {
+                var abnormal = p.Prices!.Where(x => x.State == SkuPriceState.Abnormal).ToList();
+                return $"{p.Offer!.Title}：{abnormal.Count}/{p.Prices!.Count} 个 SKU 算不出价格（{abnormal[0].Reason}）";
+            })
+            .ToList()
+        : [];
+
+    public bool HasPriceIssues => PriceIssues.Count > 0;
+
+    public string PricingResultSummary => SelectedBatch is { } b && IsCollected
+        ? $"售价币种 {b.CurrencyCode}。保留 {b.SkuCount} 个 SKU，价格丢弃 {b.DroppedSkuCount} 个（明细见任务记录）。提交功能尚未实现。"
+        : "";
 
     partial void OnSelectedBatchChanged(CollectionBatch? oldValue, CollectionBatch? newValue)
     {

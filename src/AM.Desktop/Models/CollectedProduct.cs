@@ -1,4 +1,5 @@
 using AM.Bridge;
+using AM.Core.Pricing;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace AM.Desktop.Models;
@@ -19,4 +20,7 @@ public sealed partial class CollectedProduct(int index, string title, int skuCou
 
     /// <summary>插件发来的完整采集结果，内存暂存。接入 SQLite（M2）后落库。</summary>
     public CollectedOffer? Offer { get; set; }
+
+    /// <summary>采集完成后按批次定价参数算出的结果，与 Offer.Skus 一一对应。未定价为 null。</summary>
+    public IReadOnlyList<SkuPrice>? Prices { get; set; }
 }
